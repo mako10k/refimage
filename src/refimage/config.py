@@ -16,7 +16,10 @@ class Settings(BaseSettings):
     """Application configuration settings."""
 
     # Model settings
-    clip_model_name: str = Field(default="ViT-B/32", description="CLIP model name")
+    clip_model_name: str = Field(
+        default="openai/clip-vit-base-patch32",
+        description="CLIP model name"
+    )
     device: Literal["auto", "cpu", "cuda"] = Field(
         default="auto", description="Device for model inference"
     )
