@@ -12,7 +12,7 @@ import logging
 import sqlite3
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from uuid import UUID
 
 from PIL import Image
@@ -139,7 +139,9 @@ class StorageManager:
                 sha256_hash.update(chunk)
         return sha256_hash.hexdigest()
 
-    def _create_image_metadata_from_row(self, row: sqlite3.Row) -> ImageMetadata:
+    def _create_image_metadata_from_row(
+        self, row: sqlite3.Row
+    ) -> ImageMetadata:
         """
         Create ImageMetadata instance from database row.
 
@@ -201,7 +203,9 @@ class StorageManager:
                 "BMP": "image/bmp",
                 "WEBP": "image/webp",
             }
-            mime_type = format_map.get(image.format, "application/octet-stream")
+            mime_type = format_map.get(
+                image.format, "application/octet-stream"
+            )
 
             # Generate unique file path
             file_extension = Path(filename).suffix
@@ -313,45 +317,77 @@ class StorageManager:
             raise StorageError(error_msg) from e
 
     def list_images(
-        self, limit: int = 100, offset: int = 0, tags_filter: Optional[List[str]] = None
-    ) -> List[ImageMetadata]:
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        tags_filter: Optional[List[str]] = None,
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+    ) -> Tuple[List[ImageMetadata], int]:
         """
-        List stored images with pagination.
+        List stored images with pagination and sorting.
 
         Args:
             limit: Maximum number of results
             offset: Results offset
             tags_filter: Filter by tags
+            sort_by: Field to sort by (created_at, filename, file_size)
+            sort_order: Sort order (asc, desc)
 
         Returns:
-            List of image metadata
+            Tuple of (list of image metadata, total count)
 
         Raises:
             StorageError: If listing fails
         """
         assert limit > 0, f"Invalid limit: {limit}"
         assert offset >= 0, f"Invalid offset: {offset}"
+        assert sort_by in [
+            "created_at",
+            "filename",
+            "file_size",
+        ], f"Invalid sort_by: {sort_by}"
+        assert sort_order in [
+            "asc",
+            "desc",
+        ], f"Invalid sort_order: {sort_order}"
 
         try:
             with sqlite3.connect(self.db_path) as conn:
                 conn.row_factory = sqlite3.Row
 
-                query = "SELECT * FROM images"
+                # Build base query
+                base_query = "FROM images"
+                where_conditions = []
                 params = []
 
                 if tags_filter:
-                    # Simple tag filtering (could be improved with proper JSON querying)
+                    # Simple tag filtering
                     tag_conditions = []
                     for tag in tags_filter:
                         tag_conditions.append("tags LIKE ?")
                         params.append(f'%"{tag}"%')
 
-                    query += " WHERE " + " AND ".join(tag_conditions)
+                    where_conditions.extend(tag_conditions)
 
-                query += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
-                params.extend([limit, offset])
+                where_clause = ""
+                if where_conditions:
+                    where_clause = " WHERE " + " AND ".join(where_conditions)
 
-                cursor = conn.execute(query, params)
+                # Count total results
+                count_query = f"SELECT COUNT(*) {base_query}{where_clause}"
+                cursor = conn.execute(count_query, params)
+                total_count = cursor.fetchone()[0]
+
+                # Get paginated results with sorting
+                data_query = (
+                    f"SELECT * {base_query}{where_clause} "
+                    f"ORDER BY {sort_by} {sort_order.upper()} "
+                    f"LIMIT ? OFFSET ?"
+                )
+                data_params = params + [limit, offset]
+
+                cursor = conn.execute(data_query, data_params)
                 rows = cursor.fetchall()
 
                 images = []
@@ -359,7 +395,7 @@ class StorageManager:
                     metadata = self._create_image_metadata_from_row(row)
                     images.append(metadata)
 
-                return images
+                return images, total_count
 
         except Exception as e:
             error_msg = f"Failed to list images: {e}"
@@ -528,7 +564,9 @@ class StorageManager:
 
                 embeddings = []
                 for row in cursor.fetchall():
-                    embedding_vector = json.loads(row["embedding"].decode("utf-8"))
+                    embedding_vector = json.loads(
+                        row["embedding"].decode("utf-8")
+                    )
 
                     embedding = ImageEmbedding(
                         image_id=UUID(row["image_id"]),
@@ -544,6 +582,31 @@ class StorageManager:
             error_msg = f"Failed to get all embeddings: {e}"
             logger.error(error_msg)
             raise StorageError(error_msg) from e
+
+    def has_embedding(self, image_id: UUID) -> bool:
+        """
+        Check if an image has an embedding.
+
+        Args:
+            image_id: Image identifier
+
+        Returns:
+            True if embedding exists, False otherwise
+        """
+        assert image_id is not None, "Image ID is required"
+
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute(
+                    "SELECT COUNT(*) FROM embeddings WHERE image_id = ?",
+                    (str(image_id),),
+                )
+                count = cursor.fetchone()[0]
+                return count > 0
+
+        except Exception as e:
+            logger.error(f"Failed to check embedding existence: {e}")
+            return False
 
     def get_storage_stats(self) -> Dict[str, Any]:
         """

@@ -24,6 +24,10 @@ from .models.schemas import (
     DSLQuery,
     DSLResponse,
     ErrorResponse,
+    ImageDeleteResponse,
+    ImageDetailResponse,
+    ImageListRequest,
+    ImageListResponse,
     SearchRequest,
     SearchResponse,
     SearchResult,
@@ -516,6 +520,201 @@ def _register_endpoints(
             return JSONResponse(
                 status_code=503,
                 content={"status": "unhealthy", "error": str(e)}
+            )
+
+    # Image CRUD endpoints
+    @app.get(
+        "/images",
+        response_model=ImageListResponse,
+        tags=["images"],
+        summary="List all images",
+        description="""
+        Retrieve a paginated list of all images in the system.
+
+        **Features:**
+        - Pagination with configurable limit and offset
+        - Tag filtering to narrow results
+        - Sorting by creation date, filename, or file size
+        - Ascending or descending sort order
+
+        **Use cases:**
+        - Browse all uploaded images
+        - Filter images by specific tags
+        - Paginate through large image collections
+        - Sort images by various criteria
+        """,
+        responses={
+            200: {
+                "description": "Images retrieved successfully",
+                "content": {
+                    "application/json": {
+                        "example": {
+                            "images": [
+                                {
+                                    "id": "550e8400-e29b-41d4",
+                                    "filename": "sunset.jpg",
+                                    "tags": ["nature", "sunset"]
+                                }
+                            ],
+                            "total_count": 25,
+                            "limit": 20,
+                            "offset": 0,
+                            "has_more": True
+                        }
+                    }
+                }
+            }
+        }
+    )
+    async def list_images(
+        request: ImageListRequest = Depends(),
+        storage: StorageManager = Depends(get_storage_manager),
+    ):
+        """List all images with pagination and filtering."""
+        try:
+            # Get images from storage with filtering and pagination
+            images, total_count = storage.list_images(
+                limit=request.limit,
+                offset=request.offset,
+                tags_filter=request.tags_filter,
+                sort_by=request.sort_by,
+                sort_order=request.sort_order,
+            )
+
+            has_more = (request.offset + len(images)) < total_count
+
+            return ImageListResponse(
+                images=images,
+                total_count=total_count,
+                limit=request.limit,
+                offset=request.offset,
+                has_more=has_more,
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to list images: {e}")
+            raise HTTPException(
+                status_code=500, detail="Failed to list images"
+            )
+
+    @app.get(
+        "/images/{image_id}",
+        response_model=ImageDetailResponse,
+        tags=["images"],
+        summary="Get image details",
+        description="""
+        Retrieve detailed information about a specific image.
+
+        **Information included:**
+        - Complete metadata (filename, size, dimensions, tags, etc.)
+        - Embedding availability status
+        - File existence verification
+
+        **Use cases:**
+        - View detailed image information
+        - Verify image integrity
+        - Check embedding status
+        """,
+        responses={
+            200: {"description": "Image details retrieved successfully"},
+            404: {"description": "Image not found"}
+        }
+    )
+    async def get_image_details(
+        image_id: UUID,
+        storage: StorageManager = Depends(get_storage_manager),
+    ):
+        """Get detailed information about a specific image."""
+        try:
+            metadata = storage.get_metadata(image_id)
+            if not metadata:
+                raise HTTPException(status_code=404, detail="Image not found")
+
+            # Check if embedding exists
+            has_embedding = storage.has_embedding(image_id)
+
+            # Check if file exists on disk
+            file_exists = metadata.file_path.exists()
+
+            return ImageDetailResponse(
+                metadata=metadata,
+                has_embedding=has_embedding,
+                file_exists=file_exists,
+            )
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to get image details: {e}")
+            raise HTTPException(
+                status_code=500, detail="Failed to get image details"
+            )
+
+    @app.delete(
+        "/images/{image_id}",
+        response_model=ImageDeleteResponse,
+        tags=["images"],
+        summary="Delete an image",
+        description="""
+        Permanently delete an image and all associated data.
+
+        **What gets deleted:**
+        - Image file from storage
+        - Metadata from database
+        - CLIP embedding vectors
+        - Search index entries
+
+        **Warning:** This operation cannot be undone!
+
+        **Use cases:**
+        - Remove unwanted images
+        - Clean up storage space
+        - Comply with data deletion requests
+        """,
+        responses={
+            200: {"description": "Image deleted successfully"},
+            404: {"description": "Image not found"},
+            500: {"description": "Deletion failed"}
+        }
+    )
+    async def delete_image(
+        image_id: UUID,
+        storage: StorageManager = Depends(get_storage_manager),
+        search: VectorSearchEngine = Depends(get_search_engine),
+    ):
+        """Delete an image and all associated data."""
+        try:
+            # Check if image exists
+            metadata = storage.get_metadata(image_id)
+            if not metadata:
+                raise HTTPException(status_code=404, detail="Image not found")
+
+            # Delete from search index
+            try:
+                search.remove_embedding(str(image_id))
+            except Exception as e:
+                logger.warning(f"Failed to remove from search index: {e}")
+
+            # Delete from storage (metadata, embedding, and file)
+            success = storage.delete_image(image_id)
+
+            if success:
+                return ImageDeleteResponse(
+                    image_id=image_id,
+                    deleted=True,
+                    message="Image deleted successfully"
+                )
+            else:
+                raise HTTPException(
+                    status_code=500, detail="Failed to delete image"
+                )
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to delete image: {e}")
+            raise HTTPException(
+                status_code=500, detail="Failed to delete image"
             )
 
     @app.post(

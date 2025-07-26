@@ -17,8 +17,7 @@ class Settings(BaseSettings):
 
     # Model settings
     clip_model_name: str = Field(
-        default="openai/clip-vit-base-patch32",
-        description="CLIP model name"
+        default="ViT-B/32", description="CLIP model name"
     )
     device: Literal["auto", "cpu", "cuda"] = Field(
         default="auto", description="Device for model inference"
@@ -29,10 +28,12 @@ class Settings(BaseSettings):
         default=Path("./data/images"), description="Path for image storage"
     )
     index_storage_path: Path = Field(
-        default=Path("./data/indexes"), description="Path for FAISS index storage"
+        default=Path("./data/indexes"),
+        description="Path for FAISS index storage",
     )
     metadata_storage_path: Path = Field(
-        default=Path("./data/metadata"), description="Path for metadata storage"
+        default=Path("./data/metadata"),
+        description="Path for metadata storage",
     )
     database_path: Path = Field(
         default=Path("./data/refimage.db"), description="SQLite database path"
@@ -43,7 +44,8 @@ class Settings(BaseSettings):
         default=10485760, description="Maximum image size in bytes (10MB)"
     )
     allowed_image_types: List[str] = Field(
-        default=["jpg", "jpeg", "png", "webp"], description="Allowed image file types"
+        default=["jpg", "jpeg", "png", "webp"],
+        description="Allowed image file types",
     )
 
     # FAISS settings
