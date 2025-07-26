@@ -1,0 +1,231 @@
+# RefImage .gitignore
+# Comprehensive exclusion of sensitive data, cache, and temporary files
+
+# ==========================================
+# Python
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ==========================================
+# Virtual Environments
+# ==========================================
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.python-version
+
+# ==========================================
+# IDEs and Editors
+# ==========================================
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.swp
+*.swo
+*~
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# ==========================================
+# Operating System
+# ==========================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ==========================================
+# Database Files (MCP and Application)
+# ==========================================
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+data/
+!data/.gitkeep
+
+# ==========================================
+# MCP Tool Generated Files
+# ==========================================
+templates/
+!templates/.gitkeep
+context-memory.db*
+shared-memory.db*
+memory.db*
+contexts.db*
+refimage.db*
+chroma_db/
+*.chroma
+
+# ==========================================
+# Logs and Temporary Files
+# ==========================================
+logs/
+*.log
+!logs/.gitkeep
+temp/
+tmp/
+.temp/
+.tmp/
+
+# ==========================================
+# Code Quality and Test Reports
+# ==========================================
+.coverage
+.pytest_cache/
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+
+# jscpd reports
+jscpd-report/
+code-quality-report.json
+
+# ==========================================
+# FastAPI and Web
+# ==========================================
+.env.local
+.env.development
+.env.test
+.env.production
+
+# ==========================================
+# AI/ML Models and Data
+# ==========================================
+*.bin
+*.pt
+*.pth
+*.onnx
+models/
+!models/.gitkeep
+images/
+!images/.gitkeep
+embeddings/
+!embeddings/.gitkeep
+
+# ==========================================
+# Node.js (for jscpd)
+# ==========================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# ==========================================
+# Secrets and Configuration
+# ==========================================
+.env*
+!.env.example
+config.local.*
+*.key
+*.pem
+*.p12
+*.cert
+*.crt
+secrets/
+.secrets/
+
+# ==========================================
+# Documentation Generated Files
+# ==========================================
+docs/_build/
+docs/build/
+site/
+
+# ==========================================
+# Backup and Archive Files
+# ==========================================
+*.bak
+*.backup
+*.orig
+*.rej
+*.tar
+*.tar.gz
+*.zip
+*.7z
+
+# ==========================================
+# Jupyter Notebooks
+# ==========================================
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+
+# ==========================================
+# Pre-commit
+# ==========================================
+.pre-commit-config.yaml.backup
+
+# ==========================================
+# GitHub and Git
+# ==========================================
+.git/
+.gitconfig
+
+# ==========================================
+# Project Specific
+# ==========================================
+# RefImage specific temporary files
+*.refimage.tmp
+test_images/
+uploads/
+storage/
+
+# ==========================================
+# Security Scanning Results
+# ==========================================
+bandit-report.*
+security-report.*
+
+# ==========================================
+# Performance and Profiling
+# ==========================================
+*.prof
+*.cProfile
+.scalene/
+
+# ==========================================
+# Local Development
+# ==========================================
+local/
+.local/
+run/
+.copilot-temp/

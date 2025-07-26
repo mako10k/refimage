@@ -1,0 +1,146 @@
+name: Code Quality Check
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  quality-check:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11"]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]"
+        npm install -g jscpd
+
+    - name: Run Black code formatter check
+      run: |
+        black --check --diff src/ tests/
+
+    - name: Run isort import sorting check
+      run: |
+        isort --check-only --diff src/ tests/
+
+    - name: Run Flake8 linter
+      run: |
+        flake8 src/ tests/ --max-line-length=88 --ignore=E203,W503,E501 --exclude=__pycache__,.git,.venv,venv
+
+    - name: Run MyPy type checker
+      run: |
+        mypy src/refimage --ignore-missing-imports --no-strict-optional --warn-return-any --warn-unused-configs
+      continue-on-error: true  # Allow type check failures for now
+
+    - name: Run Bandit security scanner
+      run: |
+        bandit -r src/ -f json --severity-level medium
+      continue-on-error: true  # Allow security warnings for now
+
+    - name: Run jscpd duplication check
+      run: |
+        jscpd --min-lines 5 --min-tokens 50 --reporters console,json --output ./jscpd-report src/ tests/
+
+    - name: Run comprehensive quality check
+      run: |
+        python scripts/quality_check.py --output code-quality-report.json
+
+    - name: Upload code quality report
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: code-quality-report-${{ matrix.python-version }}
+        path: |
+          code-quality-report.json
+          jscpd-report/
+
+    - name: Comment PR with quality results
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+          if (fs.existsSync('code-quality-report.json')) {
+            const report = JSON.parse(fs.readFileSync('code-quality-report.json', 'utf8'));
+            let comment = '## 📊 Code Quality Report\n\n';
+            
+            for (const [tool, result] of Object.entries(report)) {
+              const status = result.passed ? '✅' : '❌';
+              comment += `- ${status} **${tool.toUpperCase()}**: ${result.passed ? 'PASS' : 'FAIL'}\n`;
+              
+              if (!result.passed) {
+                if (tool === 'flake8' || tool === 'mypy') {
+                  comment += `  - Issues: ${result.issues_count || 0}\n`;
+                } else if (tool === 'bandit') {
+                  comment += `  - High: ${result.high_severity || 0}, Medium: ${result.medium_severity || 0}\n`;
+                } else if (tool === 'jscpd') {
+                  comment += `  - Duplication: ${(result.duplication_percentage || 0).toFixed(2)}%\n`;
+                }
+              }
+            }
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+          }
+
+  test:
+    runs-on: ubuntu-latest
+    needs: quality-check
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11"]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]"
+
+    - name: Run tests
+      run: |
+        pytest tests/ -v --tb=short
+
+    - name: Upload test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: test-results-${{ matrix.python-version }}
+        path: |
+          .coverage
+          htmlcov/
