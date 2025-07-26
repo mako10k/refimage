@@ -3,7 +3,6 @@ LLM Integration Module for RefImage.
 Provides unified interface for multiple LLM providers.
 """
 
-import asyncio
 import logging
 import time
 from abc import ABC, abstractmethod
@@ -26,8 +25,6 @@ class LLMProvider(str, Enum):
 
 class LLMError(Exception):
     """Base exception for LLM operations."""
-
-    pass
 
 
 class LLMMessage(BaseModel):
@@ -67,12 +64,10 @@ class BaseLLMProvider(ABC):
         **kwargs,
     ) -> LLMResponse:
         """Generate response from messages."""
-        pass
 
     @abstractmethod
     def get_model_name(self) -> str:
         """Get current model name."""
-        pass
 
 
 class OpenAIProvider(BaseLLMProvider):
@@ -407,20 +402,22 @@ class LLMManager:
 
 
 # Text-to-DSL conversion prompts
-TEXT_TO_DSL_SYSTEM_PROMPT = """You are an expert at converting natural language image search queries into a specialized DSL (Domain Specific Language).
+TEXT_TO_DSL_SYSTEM_PROMPT = """You are an expert at converting natural language
+image search queries into a specialized DSL (Domain Specific Language).
 
 The DSL supports these operations:
 - TEXT("query"): Basic text search
-- AND(query1, query2): Both conditions must match  
+- AND(query1, query2): Both conditions must match
 - OR(query1, query2): Either condition can match
 - EXCLUDE(base_query, exclude_query): Find base_query but exclude exclude_query
 - WEIGHT(query, weight): Apply weight (0.0-2.0) to query importance
 
 Examples:
 - "cats" → TEXT("cats")
-- "red cars or blue cars" → OR(TEXT("red cars"), TEXT("blue cars"))  
+- "red cars or blue cars" → OR(TEXT("red cars"), TEXT("blue cars"))
 - "beaches without people" → EXCLUDE(TEXT("beaches"), TEXT("people"))
-- "important: dogs, less important: puppies" → AND(WEIGHT(TEXT("dogs"), 1.5), WEIGHT(TEXT("puppies"), 0.8))
+- "important: dogs, less important: puppies" → AND(WEIGHT(TEXT("dogs"), 1.5),
+  WEIGHT(TEXT("puppies"), 0.8))
 
 Rules:
 1. Use simple TEXT() for basic queries

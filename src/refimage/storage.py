@@ -26,8 +26,6 @@ logger = logging.getLogger(__name__)
 class StorageError(Exception):
     """Storage related errors."""
 
-    pass
-
 
 class StorageManager:
     """

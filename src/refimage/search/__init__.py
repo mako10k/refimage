@@ -26,8 +26,6 @@ logger = logging.getLogger(__name__)
 class VectorSearchError(Exception):
     """Vector search related errors."""
 
-    pass
-
 
 class VectorSearchEngine:
     """

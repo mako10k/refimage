@@ -20,8 +20,6 @@ logger = logging.getLogger(__name__)
 class DSLError(Exception):
     """DSL parsing and execution errors."""
 
-    pass
-
 
 class QueryNode(ABC):
     """Abstract base class for query AST nodes."""
@@ -46,7 +44,6 @@ class QueryNode(ABC):
         Returns:
             List of matching image IDs
         """
-        pass
 
 
 class TextQuery(QueryNode):
