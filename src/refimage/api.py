@@ -10,7 +10,10 @@ import time
 from typing import Callable, Optional
 from uuid import UUID
 
-from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import (
+    Depends, FastAPI, File, HTTPException,
+    Query, UploadFile, Request
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -65,15 +68,58 @@ def create_app(
         embeddings = storage_manager.get_all_embeddings()
         if embeddings:
             search_engine.add_embeddings_batch(embeddings)
-            logger.info(f"Loaded {len(embeddings)} embeddings into search engine")
+            logger.info(
+                f"Loaded {len(embeddings)} embeddings into search engine"
+            )
 
         # Create FastAPI app
         app = FastAPI(
             title="RefImage API",
-            description="Image store and search engine with CLIP embeddings",
+            description="""
+🔍 **RefImage**: AI-powered image store and search engine
+using CLIP embeddings
+
+## Features
+- **Semantic Image Search**: Natural language queries like
+  "red car" or "sunset landscape"
+- **CLIP Embeddings**: OpenAI's CLIP model for image-text
+  understanding
+- **Dynamic Search Language (DSL)**: Complex queries with
+  AND/OR/NOT operators
+- **FAISS Vector Search**: High-performance similarity search
+- **Metadata Management**: Tags, descriptions, and file information
+
+## Quick Start
+1. Upload images via `/images/upload`
+2. Search with text via `/images/search`
+3. Use advanced DSL queries via `/search/dsl`
+
+## Example Queries
+- Simple: `{"query": "cat sitting on couch"}`
+- DSL: `{"query": "AND(TEXT(beach), NOT(TEXT(people)))"}`
+            """,
             version="0.1.0",
             docs_url="/docs",
             redoc_url="/redoc",
+            openapi_tags=[
+                {
+                    "name": "images",
+                    "description": "Image upload and management operations"
+                },
+                {
+                    "name": "search",
+                    "description": "Image search operations using text queries"
+                },
+                {
+                    "name": "dsl",
+                    "description": "Advanced search using Dynamic Search "
+                                   "Language"
+                },
+                {
+                    "name": "health",
+                    "description": "Health check and system status"
+                }
+            ]
         )
 
         # Add CORS middleware
@@ -104,26 +150,35 @@ def create_app(
 
         # Include error handlers
         @app.exception_handler(HTTPException)
-        async def http_exception_handler(request, exc):
+        async def http_exception_handler(
+            request: Request, exc: HTTPException
+        ) -> JSONResponse:
             return JSONResponse(
                 status_code=exc.status_code,
                 content=ErrorResponse(
-                    error="HTTPError", message=str(exc.detail)
+                    error="HTTPError",
+                    message=str(exc.detail),
+                    details=None
                 ).model_dump(),
             )
 
         @app.exception_handler(Exception)
-        async def general_exception_handler(request, exc):
-            logger.error(f"Unhandled exception: {exc}")
+        async def general_exception_handler(
+            request: Request, exc: Exception
+        ) -> JSONResponse:
             return JSONResponse(
                 status_code=500,
                 content=ErrorResponse(
-                    error="InternalError", message="Internal server error"
+                    error="InternalError",
+                    message="Internal server error",
+                    details=None
                 ).model_dump(),
             )
 
         # Register API endpoints
-        _register_endpoints(app, get_clip_model, get_storage_manager, get_search_engine)
+        _register_endpoints(
+            app, get_clip_model, get_storage_manager, get_search_engine
+        )
 
         return app
 
@@ -141,11 +196,63 @@ def _register_endpoints(
 ):
     """Register all API endpoints with the FastAPI app."""
 
-    @app.post("/images/upload", response_model=UploadResponse)
+    @app.post(
+        "/images/upload",
+        response_model=UploadResponse,
+        tags=["images"],
+        summary="Upload an image",
+        description="""
+        Upload an image file to the RefImage system. The image will be:
+        1. Validated for proper format (JPEG, PNG, etc.)
+        2. Stored with metadata (filename, size, dimensions)
+        3. Processed through CLIP model for semantic embeddings
+        4. Indexed for future semantic search
+
+        **Supported formats**: JPEG, PNG, GIF, BMP, WEBP
+        **Max file size**: Configurable (default: 10MB)
+        **Tags**: Comma-separated list for easy filtering
+        """,
+        responses={
+            200: {
+                "description": "Image uploaded successfully",
+                "content": {
+                    "application/json": {
+                        "example": {
+                            "image_id": "550e8400-e29b-41d4-a716-446655440000",
+                            "metadata": {
+                                "filename": "sunset.jpg",
+                                "file_size": 1024000,
+                                "width": 1920,
+                                "height": 1080,
+                                "tags": ["nature", "sunset"]
+                            },
+                            "processing_time_ms": 250.5
+                        }
+                    }
+                }
+            },
+            400: {"description": "Invalid file format or empty file"},
+            413: {"description": "File too large"},
+            500: {"description": "Internal processing error"}
+        }
+    )
     async def upload_image(
-        file: UploadFile = File(...),
-        description: Optional[str] = Query(None),
-        tags: Optional[str] = Query(None),
+        file: UploadFile = File(
+            ...,
+            description="Image file to upload (JPEG, PNG, GIF, BMP, WEBP)"
+        ),
+        description: Optional[str] = Query(
+            None,
+            description="Optional description for the image",
+            max_length=500
+        ),
+        tags: Optional[str] = Query(
+            None,
+            description=(
+                "Comma-separated tags (e.g., 'nature,sunset,landscape')"
+            ),
+            max_length=200
+        ),
         storage: StorageManager = Depends(get_storage_manager),
         clip: CLIPModel = Depends(get_clip_model),
         search: VectorSearchEngine = Depends(get_search_engine),
@@ -168,8 +275,11 @@ def _register_endpoints(
 
         try:
             # Validate file
-            if not file.content_type or not file.content_type.startswith("image/"):
-                raise HTTPException(status_code=400, detail="File must be an image")
+            if (not file.content_type or
+                    not file.content_type.startswith("image/")):
+                raise HTTPException(
+                    status_code=400, detail="File must be an image"
+                )
 
             # Read file content
             file_content = await file.read()
@@ -179,12 +289,14 @@ def _register_endpoints(
             # Parse tags
             tags_list = []
             if tags:
-                tags_list = [tag.strip() for tag in tags.split(",") if tag.strip()]
+                tags_list = [
+                    tag.strip() for tag in tags.split(",") if tag.strip()
+                ]
 
             # Store image and metadata
             metadata = storage.store_image(
                 image_data=file_content,
-                filename=file.filename,
+                filename=file.filename or "uploaded_image",
                 description=description,
                 tags=tags_list,
             )
@@ -218,7 +330,59 @@ def _register_endpoints(
             logger.error(f"Unexpected upload error: {e}")
             raise HTTPException(status_code=500, detail="Upload failed")
 
-    @app.post("/images/search", response_model=SearchResponse)
+    @app.post(
+        "/images/search",
+        response_model=SearchResponse,
+        tags=["search"],
+        summary="Search images with natural language",
+        description="""
+        Search for images using natural language queries. The system uses
+        CLIP embeddings to understand semantic relationships between text
+        and images.
+
+        **How it works:**
+        1. Your text query is encoded using CLIP
+        2. Vector similarity search finds matching images
+        3. Results are ranked by semantic similarity score
+        4. Optional metadata and tag filtering applied
+
+        **Example queries:**
+        - "a red car in the parking lot"
+        - "sunset over mountains"
+        - "people playing on the beach"
+        - "cat sitting on a couch"
+
+        **Filtering:** Use tags_filter to narrow results by specific tags
+        **Threshold:** Higher values (0.8+) = more precise,
+        lower (0.3+) = broader
+        """,
+        responses={
+            200: {
+                "description": "Search completed successfully",
+                "content": {
+                    "application/json": {
+                        "example": {
+                            "query": "red car",
+                            "results": [
+                                {
+                                    "image_id": "550e8400-e29b-41d4",
+                                    "similarity_score": 0.85,
+                                    "metadata": {
+                                        "filename": "red_sports_car.jpg",
+                                        "tags": ["car", "red", "vehicle"]
+                                    }
+                                }
+                            ],
+                            "total_results": 1,
+                            "search_time_ms": 45.2
+                        }
+                    }
+                }
+            },
+            400: {"description": "Invalid search parameters"},
+            500: {"description": "Search processing error"}
+        }
+    )
     async def search_images(
         request: SearchRequest,
         clip: CLIPModel = Depends(get_clip_model),
@@ -255,19 +419,22 @@ def _register_endpoints(
             for image_id_str, similarity_score in search_results:
                 image_id = UUID(image_id_str)
 
-                result = SearchResult(
-                    image_id=image_id, similarity_score=similarity_score
-                )
-
-                # Include metadata if requested
+                # Get metadata if requested
+                metadata = None
                 if request.include_metadata:
                     metadata = storage.get_metadata(image_id)
-                    result.metadata = metadata
+
+                result = SearchResult(
+                    image_id=image_id,
+                    similarity_score=similarity_score,
+                    metadata=metadata
+                )
 
                 # Apply tag filtering if specified
                 if request.tags_filter and result.metadata:
                     if not any(
-                        tag in result.metadata.tags for tag in request.tags_filter
+                        tag in result.metadata.tags
+                        for tag in request.tags_filter
                     ):
                         continue
 
@@ -292,7 +459,42 @@ def _register_endpoints(
             logger.error(f"Unexpected search error: {e}")
             raise HTTPException(status_code=500, detail="Search failed")
 
-    @app.get("/health")
+    @app.get(
+        "/health",
+        tags=["health"],
+        summary="System health check",
+        description="""
+        Check the health and status of all RefImage system components.
+
+        **Checks performed:**
+        - CLIP model availability and configuration
+        - Storage system connectivity and statistics
+        - Vector search engine status and performance
+        - Overall system readiness
+
+        Returns detailed information about each component's status
+        and performance metrics.
+        """,
+        responses={
+            200: {
+                "description": "System is healthy",
+                "content": {
+                    "application/json": {
+                        "example": {
+                            "status": "healthy",
+                            "timestamp": "2025-07-26T08:30:00Z",
+                            "services": {
+                                "clip_model": {"status": "ready"},
+                                "storage": {"status": "ready", "images": 150},
+                                "search_engine": {"status": "ready"}
+                            }
+                        }
+                    }
+                }
+            },
+            503: {"description": "System is unhealthy"}
+        }
+    )
     async def health_check(
         clip: CLIPModel = Depends(get_clip_model),
         storage: StorageManager = Depends(get_storage_manager),
@@ -312,10 +514,66 @@ def _register_endpoints(
         except Exception as e:
             logger.error(f"Health check error: {e}")
             return JSONResponse(
-                status_code=503, content={"status": "unhealthy", "error": str(e)}
+                status_code=503,
+                content={"status": "unhealthy", "error": str(e)}
             )
 
-    @app.post("/search/dsl", response_model=DSLResponse)
+    @app.post(
+        "/search/dsl",
+        response_model=DSLResponse,
+        tags=["dsl"],
+        summary="Advanced search with Dynamic Search Language",
+        description="""
+        Execute complex search queries using RefImage's Dynamic Search
+        Language (DSL). DSL allows combining multiple search criteria
+        with logical operators.
+
+        **DSL Operators:**
+        - `TEXT(query)`: Semantic text search
+        - `AND(expr1, expr2)`: Both conditions must match
+        - `OR(expr1, expr2)`: Either condition must match
+        - `NOT(expr)`: Exclude matching results
+
+        **Example queries:**
+        - `TEXT(cat)`: Simple text search for cats
+        - `AND(TEXT(beach), TEXT(sunset))`: Beach sunset images
+        - `OR(TEXT(dog), TEXT(puppy))`: Dogs or puppies
+        - `AND(TEXT(car), NOT(TEXT(red)))`: Cars that are not red
+        - `AND(OR(TEXT(ocean), TEXT(sea)), NOT(TEXT(people)))`:
+          Ocean/sea without people
+
+        **Use cases:**
+        - Content filtering and exclusion
+        - Multi-criteria search
+        - Complex semantic queries
+        - Precise result refinement
+        """,
+        responses={
+            200: {
+                "description": "DSL query executed successfully",
+                "content": {
+                    "application/json": {
+                        "example": {
+                            "query": "AND(TEXT(beach), NOT(TEXT(people)))",
+                            "results": [
+                                {
+                                    "filename": "empty_beach.jpg",
+                                    "tags": ["beach", "nature", "peaceful"]
+                                }
+                            ],
+                            "total_count": 1,
+                            "query_info": {
+                                "type": "dsl",
+                                "threshold": 0.3
+                            }
+                        }
+                    }
+                }
+            },
+            400: {"description": "Invalid DSL syntax"},
+            500: {"description": "Query execution error"}
+        }
+    )
     async def search_dsl(
         request: DSLQuery,
         clip: CLIPModel = Depends(get_clip_model),
@@ -349,7 +607,7 @@ def _register_endpoints(
             results = []
             for image_id in image_ids:
                 try:
-                    metadata = storage.get_image_metadata(UUID(image_id))
+                    metadata = storage.get_metadata(UUID(image_id))
                     if metadata:
                         results.append(metadata)
                 except (ValueError, StorageError):
