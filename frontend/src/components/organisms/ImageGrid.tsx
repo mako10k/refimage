@@ -38,8 +38,8 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
     );
   }
 
-  // Error state
-  if (error) {
+  // Error state (only show if no results to display)
+  if (error && results.length === 0) {
     return (
       <div className={`image-grid image-grid--error ${className}`}>
         <div className="image-grid__error">
@@ -99,6 +99,20 @@ export const ImageGrid: React.FC<ImageGridProps> = ({
   // Grid with results
   return (
     <div className={`image-grid ${className}`}>
+      {/* Show error banner if there's an error but we still have results */}
+      {error && results.length > 0 && (
+        <div className="image-grid__error-banner">
+          <div className="image-grid__error-banner-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+          </div>
+          <span className="image-grid__error-banner-text">{error}</span>
+        </div>
+      )}
+      
       <div className="image-grid__container">
         {results.map((result) => (
           <ImageCard

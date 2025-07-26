@@ -14,6 +14,28 @@
   width: 100%;
 }
 
+/* Error banner for when we have results but API issues */
+.image-grid__error-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #fef3cd;
+  color: #92400e;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 24px;
+  border: 1px solid #fde68a;
+}
+
+.image-grid__error-banner-icon {
+  flex-shrink: 0;
+}
+
+.image-grid__error-banner-text {
+  font-size: 14px;
+  font-weight: 500;
+}
+
 /* Loading state */
 .image-grid--loading {
   display: flex;
