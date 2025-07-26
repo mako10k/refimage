@@ -402,6 +402,78 @@ class StorageManager:
             logger.error(error_msg)
             raise StorageError(error_msg) from e
 
+    def update_metadata(
+        self,
+        image_id: UUID,
+        description: Optional[str] = None,
+        tags: Optional[List[str]] = None
+    ) -> Optional[ImageMetadata]:
+        """
+        Update image metadata.
+
+        Args:
+            image_id: Image identifier
+            description: New description (None to keep existing)
+            tags: New tags list (None to keep existing)
+
+        Returns:
+            Updated metadata if successful, None if image not found
+
+        Raises:
+            StorageError: If update fails
+        """
+        assert image_id is not None, "Image ID is required"
+
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+
+                # Check if image exists
+                cursor = conn.execute(
+                    "SELECT * FROM images WHERE id = ?", (str(image_id),)
+                )
+                row = cursor.fetchone()
+                if not row:
+                    return None
+
+                # Prepare update fields
+                update_fields = []
+                params = []
+
+                if description is not None:
+                    update_fields.append("description = ?")
+                    params.append(description)
+
+                if tags is not None:
+                    update_fields.append("tags = ?")
+                    params.append(json.dumps(tags))
+
+                if not update_fields:
+                    # No updates requested, return current metadata
+                    return self._create_image_metadata_from_row(row)
+
+                # Perform update
+                update_query = (
+                    f"UPDATE images SET {', '.join(update_fields)} "
+                    f"WHERE id = ?"
+                )
+                params.append(str(image_id))
+
+                conn.execute(update_query, params)
+                conn.commit()
+
+                # Fetch and return updated metadata
+                cursor = conn.execute(
+                    "SELECT * FROM images WHERE id = ?", (str(image_id),)
+                )
+                updated_row = cursor.fetchone()
+                return self._create_image_metadata_from_row(updated_row)
+
+        except Exception as e:
+            error_msg = f"Failed to update metadata for {image_id}: {e}"
+            logger.error(error_msg)
+            raise StorageError(error_msg) from e
+
     def delete_image(self, image_id: UUID) -> bool:
         """
         Delete image and metadata.

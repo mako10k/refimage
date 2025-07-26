@@ -9,15 +9,27 @@ import logging
 
 import uvicorn
 
-from refimage.api import create_app
-from refimage.config import Settings
+from .api import create_app
+from .config import Settings
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 
 logger = logging.getLogger(__name__)
+
+
+# Create app instance for uvicorn
+try:
+    settings = Settings()
+    app = create_app(settings)
+except Exception as e:
+    logger.warning(f"Failed to create app instance: {e}")
+    # Create minimal app for development
+    from fastapi import FastAPI
+    app = FastAPI(title="RefImage API (Development)")
 
 
 def main():
@@ -30,7 +42,7 @@ def main():
         app = create_app(settings)
 
         # Update global app instance
-        from refimage import api
+        from . import api
 
         api.app = app
 

@@ -28,6 +28,8 @@ from .models.schemas import (
     ImageDetailResponse,
     ImageListRequest,
     ImageListResponse,
+    ImageUpdateRequest,
+    ImageUpdateResponse,
     SearchRequest,
     SearchResponse,
     SearchResult,
@@ -715,6 +717,70 @@ def _register_endpoints(
             logger.error(f"Failed to delete image: {e}")
             raise HTTPException(
                 status_code=500, detail="Failed to delete image"
+            )
+
+    @app.put(
+        "/images/{image_id}",
+        response_model=ImageUpdateResponse,
+        tags=["Images"],
+        summary="Update image metadata",
+        description="""
+        Update metadata for an existing image.
+
+        **Supported updates:**
+        - Description: Human-readable description of the image
+        - Tags: List of keyword tags for categorization
+
+        **Field behavior:**
+        - Only specified fields are updated
+        - Omitted fields remain unchanged
+        - Empty string clears the field
+        - Tags are automatically cleaned (trimmed, deduplicated)
+
+        **Use cases:**
+        - Add descriptive text to uploaded images
+        - Update categorization tags
+        - Correct or enhance existing metadata
+        """,
+        responses={
+            200: {"description": "Image metadata updated successfully"},
+            404: {"description": "Image not found"},
+            400: {"description": "Invalid request data"},
+            500: {"description": "Internal server error"},
+        }
+    )
+    async def update_image_metadata(
+        image_id: UUID,
+        request: ImageUpdateRequest,
+        storage: StorageManager = Depends(get_storage_manager),
+    ) -> ImageUpdateResponse:
+        """Update image metadata."""
+        try:
+            # Attempt to update metadata
+            updated_metadata = storage.update_metadata(
+                image_id=image_id,
+                description=request.description,
+                tags=request.tags
+            )
+
+            if updated_metadata is None:
+                raise HTTPException(
+                    status_code=404, detail="Image not found"
+                )
+
+            return ImageUpdateResponse(
+                image_id=image_id,
+                updated=True,
+                metadata=updated_metadata,
+                message="Metadata updated successfully"
+            )
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to update image metadata: {e}")
+            raise HTTPException(
+                status_code=500, detail="Failed to update metadata"
             )
 
     @app.post(
