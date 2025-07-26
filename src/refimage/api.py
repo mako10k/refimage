@@ -10,6 +10,7 @@ Complete redesign with:
 """
 
 import logging
+import time
 from typing import Optional
 from uuid import UUID
 
@@ -18,8 +19,15 @@ from fastapi.responses import StreamingResponse
 
 from .config import Settings
 from .dsl import DSLError, DSLExecutor
+from .llm import (
+    LLMManager,
+    LLMMessage,
+    LLMError,
+    TEXT_TO_DSL_SYSTEM_PROMPT,
+    TEXT_TO_DSL_EXAMPLES,
+)
 from .models.clip_model import CLIPModel, CLIPModelError
-from .models.schemas import (  # Conversion schemas; Search schemas; Metadata schemas; Image schemas; System schemas
+from .models.schemas import (  # Conversion, Search, Metadata, etc.
     DSLExample,
     DSLSearchRequest,
     DSLSearchResponse,
@@ -31,6 +39,10 @@ from .models.schemas import (  # Conversion schemas; Search schemas; Metadata sc
     ImageListResponse,
     ImageMetadata,
     ImageUploadResponse,
+    LLMProviderInfo,
+    LLMProvidersResponse,
+    LLMSwitchRequest,
+    LLMSwitchResponse,
     MetadataCreateRequest,
     MetadataCreateResponse,
     MetadataDeleteResponse,
@@ -41,6 +53,8 @@ from .models.schemas import (  # Conversion schemas; Search schemas; Metadata sc
     SearchResult,
     TextSearchRequest,
     TextSearchResponse,
+    TextToDSLRequest,
+    TextToDSLResponse,
     TextToVectorRequest,
     TextToVectorResponse,
     VectorComponent,
@@ -48,15 +62,17 @@ from .models.schemas import (  # Conversion schemas; Search schemas; Metadata sc
     VectorSearchResponse,
 )
 from .search import VectorSearchEngine, VectorSearchError
-from .storage import StorageError, StorageManager
+from .storage import StorageManager, StorageError
 
 logger = logging.getLogger(__name__)
 
 
 def create_app(settings: Optional[Settings] = None) -> FastAPI:
     """Create RefImage FastAPI application."""
+    # Contract Programming: Validate settings
     if settings is None:
         settings = Settings()
+    assert settings is not None, "Settings must be provided or created"
 
     app = FastAPI(
         title="RefImage API",
@@ -66,27 +82,82 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         redoc_url="/redoc",
     )
 
-    # Initialize components
+    # Initialize core components first (non-faiss dependent)
     storage_manager = StorageManager(settings)
+    assert storage_manager is not None, "Storage manager initialization failed"
 
-    clip_model = CLIPModel(settings)
+    # LLM manager - independent of faiss
+    llm_manager = LLMManager(settings)
+    assert llm_manager is not None, "LLM manager initialization failed"
 
-    search_engine = VectorSearchEngine(settings)
-
-    dsl_executor = DSLExecutor(clip_model, search_engine, storage_manager)
+    # Lazy initialization containers for faiss-dependent components
+    _clip_model = None
+    _search_engine = None
+    _dsl_executor = None
 
     # Dependency providers
     def get_storage_manager() -> StorageManager:
+        """Get storage manager (always available)."""
+        assert storage_manager is not None, "Storage manager not initialized"
         return storage_manager
 
     def get_clip_model() -> CLIPModel:
-        return clip_model
+        """Get CLIP model with lazy initialization."""
+        nonlocal _clip_model
+        if _clip_model is None:
+            try:
+                _clip_model = CLIPModel(settings)
+                assert _clip_model is not None, "CLIP model creation failed"
+            except Exception as e:
+                logger.error(f"CLIP model initialization failed: {e}")
+                raise HTTPException(
+                    status_code=503,
+                    detail="CLIP model not available - dependency error",
+                )
+        return _clip_model
 
     def get_search_engine() -> VectorSearchEngine:
-        return search_engine
+        """Get search engine with lazy initialization."""
+        nonlocal _search_engine
+        if _search_engine is None:
+            try:
+                _search_engine = VectorSearchEngine(settings)
+                assert (
+                    _search_engine is not None
+                ), "Search engine creation failed"
+            except Exception as e:
+                logger.error(f"Search engine initialization failed: {e}")
+                raise HTTPException(
+                    status_code=503,
+                    detail="Search engine not available - faiss dependency error",
+                )
+        return _search_engine
 
     def get_dsl_executor() -> DSLExecutor:
-        return dsl_executor
+        """Get DSL executor with lazy initialization."""
+        nonlocal _dsl_executor
+        if _dsl_executor is None:
+            try:
+                clip_model = get_clip_model()
+                search_engine = get_search_engine()
+                _dsl_executor = DSLExecutor(
+                    clip_model, search_engine, storage_manager
+                )
+                assert (
+                    _dsl_executor is not None
+                ), "DSL executor creation failed"
+            except Exception as e:
+                logger.error(f"DSL executor initialization failed: {e}")
+                raise HTTPException(
+                    status_code=503,
+                    detail="DSL executor not available - dependency error",
+                )
+        return _dsl_executor
+
+    def get_llm_manager() -> LLMManager:
+        """Get LLM manager (always available)."""
+        assert llm_manager is not None, "LLM manager not initialized"
+        return llm_manager
 
     # ========================================
     # CONVERSION TOOLS
@@ -116,7 +187,9 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             )
         except CLIPModelError as e:
             logger.error(f"CLIP model error: {e}")
-            raise HTTPException(status_code=500, detail=f"CLIP model error: {e}")
+            raise HTTPException(
+                status_code=500, detail=f"CLIP model error: {e}"
+            )
         except Exception as e:
             logger.error(f"Text to vector conversion failed: {e}")
             raise HTTPException(status_code=500, detail="Conversion failed")
@@ -158,7 +231,9 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             raise HTTPException(status_code=400, detail=f"DSL error: {e}")
         except CLIPModelError as e:
             logger.error(f"CLIP model error: {e}")
-            raise HTTPException(status_code=500, detail=f"CLIP model error: {e}")
+            raise HTTPException(
+                status_code=500, detail=f"CLIP model error: {e}"
+            )
         except Exception as e:
             logger.error(f"DSL to vector conversion failed: {e}")
             raise HTTPException(status_code=500, detail="Conversion failed")
@@ -202,6 +277,179 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         )
 
     # ========================================
+    # LLM INTEGRATION
+    # ========================================
+
+    @app.post(
+        "/conversions/text-to-dsl",
+        response_model=TextToDSLResponse,
+        tags=["Conversions"],
+        summary="Convert natural language to DSL using LLM",
+        description=(
+            "Use LLM to convert natural language queries to DSL format."
+        ),
+    )
+    async def text_to_dsl(
+        request: TextToDSLRequest,
+        llm_manager: LLMManager = Depends(get_llm_manager),
+    ):
+        """Convert natural language to DSL using LLM."""
+        try:
+            start_time = time.time()
+
+            # Build prompt with examples if requested
+            prompt_parts = [TEXT_TO_DSL_SYSTEM_PROMPT]
+
+            if request.include_examples:
+                examples_text = "\n\nExamples:\n"
+                for example in TEXT_TO_DSL_EXAMPLES:
+                    examples_text += f"Input: {example['input']}\n"
+                    examples_text += f"Output: {example['output']}\n"
+                    explanation = f"Explanation: {example['explanation']}\n\n"
+                    examples_text += explanation
+                prompt_parts.append(examples_text)
+
+            prompt_parts.append(f"\nQuery: {request.text}")
+
+            system_prompt = "\n".join(prompt_parts)
+
+            # Create messages
+            messages = [
+                LLMMessage(role="system", content=system_prompt),
+                LLMMessage(role="user", content=request.text),
+            ]
+
+            provider_enum = None
+            if request.provider:
+                from .llm import LLMProvider
+
+                provider_enum = LLMProvider(request.provider)
+
+            # Generate DSL using LLM
+            response = await llm_manager.generate(
+                messages,
+                provider=provider_enum,
+                temperature=request.temperature,
+                max_tokens=200,
+            )
+
+            # Parse response to extract DSL and explanation
+            dsl_query = response.content.strip()
+            explanation = (
+                f"Converted using {response.provider} ({response.model})"
+            )
+
+            # Simple confidence estimation based on response quality
+            confidence = 0.8 if len(dsl_query) > 10 else 0.5
+
+            processing_time = int((time.time() - start_time) * 1000)
+
+            return TextToDSLResponse(
+                original_text=request.text,
+                dsl_query=dsl_query,
+                explanation=explanation,
+                confidence=confidence,
+                provider=response.provider,
+                model=response.model,
+                processing_time_ms=processing_time,
+            )
+
+        except LLMError as e:
+            logger.error(f"LLM error: {e}")
+            raise HTTPException(status_code=500, detail=f"LLM error: {e}")
+        except Exception as e:
+            logger.error(f"Text to DSL conversion failed: {e}")
+            raise HTTPException(
+                status_code=500, detail="Text to DSL conversion failed"
+            )
+
+    @app.get(
+        "/llm/providers",
+        response_model=LLMProvidersResponse,
+        tags=["LLM"],
+        summary="List available LLM providers",
+        description="Get information about available LLM providers.",
+    )
+    async def list_llm_providers(
+        llm_manager: LLMManager = Depends(get_llm_manager),
+    ):
+        """List available LLM providers."""
+        try:
+            current_provider = llm_manager.get_current_provider()
+            available_providers = llm_manager.get_available_providers()
+
+            providers = []
+            from .llm import LLMProvider
+
+            for provider_name in ["openai", "claude", "local"]:
+                try:
+                    provider_enum = LLMProvider(provider_name)
+                    is_available = provider_enum in available_providers
+                    model_name = (
+                        llm_manager.providers[provider_enum].get_model_name()
+                        if is_available
+                        else None
+                    )
+                    providers.append(
+                        LLMProviderInfo(
+                            name=provider_name,
+                            available=is_available,
+                            model=model_name,
+                            description=f"{provider_name.title()} LLM provider",
+                        )
+                    )
+                except ValueError:
+                    # Invalid provider name
+                    continue
+
+            return LLMProvidersResponse(
+                current_provider=current_provider,
+                providers=providers,
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to list LLM providers: {e}")
+            raise HTTPException(
+                status_code=500, detail="Failed to list LLM providers"
+            )
+
+    @app.post(
+        "/llm/switch",
+        response_model=LLMSwitchResponse,
+        tags=["LLM"],
+        summary="Switch LLM provider",
+        description="Switch to a different LLM provider.",
+    )
+    async def switch_llm_provider(
+        request: LLMSwitchRequest,
+        llm_manager: LLMManager = Depends(get_llm_manager),
+    ):
+        """Switch LLM provider."""
+        try:
+            previous_provider = llm_manager.get_current_provider()
+
+            from .llm import LLMProvider
+
+            provider_enum = LLMProvider(request.provider)
+            llm_manager.switch_provider(provider_enum)
+
+            return LLMSwitchResponse(
+                success=True,
+                previous_provider=previous_provider,
+                current_provider=request.provider,
+                message=f"Successfully switched to {request.provider} provider",
+            )
+
+        except LLMError as e:
+            logger.error(f"LLM provider switch failed: {e}")
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            logger.error(f"Failed to switch LLM provider: {e}")
+            raise HTTPException(
+                status_code=500, detail="Failed to switch provider"
+            )
+
+    # ========================================
     # SEARCH EXECUTION
     # ========================================
 
@@ -237,7 +485,9 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
                     if metadata:
                         search_results.append(
                             SearchResult(
-                                image_id=UUID(image_id), metadata=metadata, score=score
+                                image_id=UUID(image_id),
+                                metadata=metadata,
+                                score=score,
                             )
                         )
                 except (ValueError, StorageError):
@@ -349,7 +599,9 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
                     if metadata:
                         search_results.append(
                             SearchResult(
-                                image_id=UUID(image_id), metadata=metadata, score=score
+                                image_id=UUID(image_id),
+                                metadata=metadata,
+                                score=score,
                             )
                         )
                 except (ValueError, StorageError):
@@ -383,7 +635,9 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
 
         except CLIPModelError as e:
             logger.error(f"CLIP model error: {e}")
-            raise HTTPException(status_code=500, detail=f"CLIP model error: {e}")
+            raise HTTPException(
+                status_code=500, detail=f"CLIP model error: {e}"
+            )
         except VectorSearchError as e:
             logger.error(f"Vector search error: {e}")
             raise HTTPException(status_code=500, detail=f"Search error: {e}")
@@ -418,7 +672,9 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             )
 
             return MetadataCreateResponse(
-                metadata=metadata, created=True, message="Metadata created successfully"
+                metadata=metadata,
+                created=True,
+                message="Metadata created successfully",
             )
 
         except StorageError as e:
@@ -483,7 +739,9 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         try:
             metadata = storage.get_metadata(metadata_id)
             if metadata is None:
-                raise HTTPException(status_code=404, detail="Metadata not found")
+                raise HTTPException(
+                    status_code=404, detail="Metadata not found"
+                )
 
             return metadata
 
@@ -515,7 +773,9 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             )
 
             if updated_metadata is None:
-                raise HTTPException(status_code=404, detail="Metadata not found")
+                raise HTTPException(
+                    status_code=404, detail="Metadata not found"
+                )
 
             return MetadataUpdateResponse(
                 metadata_id=metadata_id,
@@ -548,7 +808,9 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             success = storage.delete_metadata_only(metadata_id)
 
             if not success:
-                raise HTTPException(status_code=404, detail="Metadata not found")
+                raise HTTPException(
+                    status_code=404, detail="Metadata not found"
+                )
 
             return MetadataDeleteResponse(
                 metadata_id=metadata_id,
@@ -587,7 +849,9 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             # Parse tags
             tag_list = []
             if tags:
-                tag_list = [tag.strip() for tag in tags.split(",") if tag.strip()]
+                tag_list = [
+                    tag.strip() for tag in tags.split(",") if tag.strip()
+                ]
 
             # Store image and create metadata
             metadata = storage.store_image(
@@ -618,7 +882,9 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
 
         except CLIPModelError as e:
             logger.error(f"CLIP model error: {e}")
-            raise HTTPException(status_code=500, detail=f"CLIP model error: {e}")
+            raise HTTPException(
+                status_code=500, detail=f"CLIP model error: {e}"
+            )
         except StorageError as e:
             logger.error(f"Storage error: {e}")
             raise HTTPException(status_code=500, detail=f"Storage error: {e}")
@@ -685,7 +951,9 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             # Get image path
             image_path = storage.get_image_path(image_id)
             if not image_path.exists():
-                raise HTTPException(status_code=404, detail="Image file not found")
+                raise HTTPException(
+                    status_code=404, detail="Image file not found"
+                )
 
             # Return streaming response
             def iterfile():
@@ -725,7 +993,9 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             try:
                 search_engine.remove_image(str(image_id))
             except VectorSearchError:
-                logger.warning(f"Could not remove {image_id} from search index")
+                logger.warning(
+                    f"Could not remove {image_id} from search index"
+                )
 
             # Delete from storage (metadata, embedding, and file)
             success = storage.delete_image(image_id)
@@ -737,13 +1007,17 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
                     message="Image deleted successfully",
                 )
             else:
-                raise HTTPException(status_code=500, detail="Failed to delete image")
+                raise HTTPException(
+                    status_code=500, detail="Failed to delete image"
+                )
 
         except HTTPException:
             raise
         except Exception as e:
             logger.error(f"Failed to delete image: {e}")
-            raise HTTPException(status_code=500, detail="Failed to delete image")
+            raise HTTPException(
+                status_code=500, detail="Failed to delete image"
+            )
 
     # ========================================
     # SYSTEM

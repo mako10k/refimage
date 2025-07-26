@@ -6,7 +6,7 @@ from environment variables and provides type-safe configuration objects.
 """
 
 from pathlib import Path
-from typing import List, Literal
+from typing import List, Literal, Optional
 
 from pydantic import Field
 from pydantic_settings import BaseSettings
@@ -16,7 +16,9 @@ class Settings(BaseSettings):
     """Application configuration settings."""
 
     # Model settings
-    clip_model_name: str = Field(default="ViT-B/32", description="CLIP model name")
+    clip_model_name: str = Field(
+        default="ViT-B/32", description="CLIP model name"
+    )
     device: Literal["auto", "cpu", "cuda"] = Field(
         default="auto", description="Device for model inference"
     )
@@ -59,6 +61,43 @@ class Settings(BaseSettings):
     server_port: int = Field(default=8000, description="Server port")
     log_level: str = Field(default="INFO", description="Log level")
     debug: bool = Field(default=False, description="Debug mode")
+
+    # LLM settings
+    llm_provider: str = Field(
+        default="openai",
+        description="Default LLM provider (openai/claude/local)",
+    )
+
+    # OpenAI settings
+    openai_api_key: Optional[str] = Field(
+        default=None, description="OpenAI API key"
+    )
+    openai_model: str = Field(default="gpt-4", description="OpenAI model name")
+    openai_base_url: str = Field(
+        default="https://api.openai.com/v1", description="OpenAI base URL"
+    )
+
+    # Claude settings
+    claude_api_key: Optional[str] = Field(
+        default=None, description="Claude API key"
+    )
+    claude_model: str = Field(
+        default="claude-3-sonnet-20240229", description="Claude model name"
+    )
+    claude_base_url: str = Field(
+        default="https://api.anthropic.com/v1", description="Claude base URL"
+    )
+
+    # Local LLM settings
+    local_llm_enabled: bool = Field(
+        default=False, description="Enable local LLM"
+    )
+    local_llm_model: str = Field(
+        default="llama2", description="Local LLM model name"
+    )
+    local_llm_base_url: str = Field(
+        default="http://localhost:11434", description="Local LLM base URL"
+    )
 
     class Config:
         """Pydantic configuration."""

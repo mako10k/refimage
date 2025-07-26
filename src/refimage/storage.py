@@ -139,7 +139,9 @@ class StorageManager:
                 sha256_hash.update(chunk)
         return sha256_hash.hexdigest()
 
-    def _create_image_metadata_from_row(self, row: sqlite3.Row) -> ImageMetadata:
+    def _create_image_metadata_from_row(
+        self, row: sqlite3.Row
+    ) -> ImageMetadata:
         """
         Create ImageMetadata instance from database row.
 
@@ -201,7 +203,9 @@ class StorageManager:
                 "BMP": "image/bmp",
                 "WEBP": "image/webp",
             }
-            mime_type = format_map.get(image.format, "application/octet-stream")
+            mime_type = format_map.get(
+                image.format, "application/octet-stream"
+            )
 
             # Generate unique file path
             file_extension = Path(filename).suffix
@@ -450,7 +454,8 @@ class StorageManager:
 
                 # Perform update
                 update_query = (
-                    f"UPDATE images SET {', '.join(update_fields)} " f"WHERE id = ?"
+                    f"UPDATE images SET {', '.join(update_fields)} "
+                    f"WHERE id = ?"
                 )
                 params.append(str(image_id))
 
@@ -631,7 +636,9 @@ class StorageManager:
 
                 embeddings = []
                 for row in cursor.fetchall():
-                    embedding_vector = json.loads(row["embedding"].decode("utf-8"))
+                    embedding_vector = json.loads(
+                        row["embedding"].decode("utf-8")
+                    )
 
                     embedding = ImageEmbedding(
                         image_id=UUID(row["image_id"]),
@@ -741,7 +748,10 @@ class StorageManager:
             # Prepare dimensions
             dimensions_dict = None
             if dimensions:
-                dimensions_dict = {"width": dimensions[0], "height": dimensions[1]}
+                dimensions_dict = {
+                    "width": dimensions[0],
+                    "height": dimensions[1],
+                }
 
             with sqlite3.connect(self.db_path) as conn:
                 conn.execute(
@@ -757,7 +767,11 @@ class StorageManager:
                         description,
                         json.dumps(tags or []),
                         file_size,
-                        (json.dumps(dimensions_dict) if dimensions_dict else None),
+                        (
+                            json.dumps(dimensions_dict)
+                            if dimensions_dict
+                            else None
+                        ),
                         datetime.utcnow().isoformat(),
                     ),
                 )
