@@ -14,8 +14,7 @@ from .config import Settings
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 
 logger = logging.getLogger(__name__)
@@ -29,6 +28,7 @@ except Exception as e:
     logger.warning(f"Failed to create app instance: {e}")
     # Create minimal app for development
     from fastapi import FastAPI
+
     app = FastAPI(title="RefImage API (Development)")
 
 

@@ -8,7 +8,7 @@ from environment variables and provides type-safe configuration objects.
 from pathlib import Path
 from typing import List, Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field
 from pydantic_settings import BaseSettings
 
 
@@ -16,9 +16,7 @@ class Settings(BaseSettings):
     """Application configuration settings."""
 
     # Model settings
-    clip_model_name: str = Field(
-        default="ViT-B/32", description="CLIP model name"
-    )
+    clip_model_name: str = Field(default="ViT-B/32", description="CLIP model name")
     device: Literal["auto", "cpu", "cuda"] = Field(
         default="auto", description="Device for model inference"
     )

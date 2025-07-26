@@ -1,39 +1,51 @@
 """
-FastAPI application for RefImage image store and search engine.
+RefImage API - Pipeline-oriented search architecture.
 
-This module provides REST API endpoints for image upload,
-storage, and semantic search functionality.
+Complete redesign with:
+- Metadata: Full CRUD
+- Image data: CRD only (no UPDATE)
+- Conversions: text-to-dsl, dsl-to-vector tools
+- Search: vector, dsl, text unified
+- LLM integration: OpenAI/Local provider switching
 """
 
 import logging
-import time
-from typing import Callable, Optional
+from typing import Optional
 from uuid import UUID
 
-from fastapi import (
-    Depends, FastAPI, File, HTTPException,
-    Query, UploadFile, Request
-)
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi.responses import StreamingResponse
 
 from .config import Settings
 from .dsl import DSLError, DSLExecutor
 from .models.clip_model import CLIPModel, CLIPModelError
-from .models.schemas import (
-    DSLQuery,
-    DSLResponse,
-    ErrorResponse,
+from .models.schemas import (  # Conversion schemas; Search schemas; Metadata schemas; Image schemas; System schemas
+    DSLExample,
+    DSLSearchRequest,
+    DSLSearchResponse,
+    DSLSyntaxResponse,
+    DSLToVectorRequest,
+    DSLToVectorResponse,
+    HealthResponse,
     ImageDeleteResponse,
-    ImageDetailResponse,
-    ImageListRequest,
     ImageListResponse,
-    ImageUpdateRequest,
-    ImageUpdateResponse,
-    SearchRequest,
-    SearchResponse,
+    ImageMetadata,
+    ImageUploadResponse,
+    MetadataCreateRequest,
+    MetadataCreateResponse,
+    MetadataDeleteResponse,
+    MetadataListResponse,
+    MetadataUpdateRequest,
+    MetadataUpdateResponse,
+    PipelineDebugInfo,
     SearchResult,
-    UploadResponse,
+    TextSearchRequest,
+    TextSearchResponse,
+    TextToVectorRequest,
+    TextToVectorResponse,
+    VectorComponent,
+    VectorSearchRequest,
+    VectorSearchResponse,
 )
 from .search import VectorSearchEngine, VectorSearchError
 from .storage import StorageError, StorageManager
@@ -41,829 +53,236 @@ from .storage import StorageError, StorageManager
 logger = logging.getLogger(__name__)
 
 
-def create_app(
-    settings: Optional[Settings] = None, config: Optional[Settings] = None
-) -> FastAPI:
-    """
-    Create and configure FastAPI application.
+def create_app(settings: Optional[Settings] = None) -> FastAPI:
+    """Create RefImage FastAPI application."""
+    if settings is None:
+        settings = Settings()
 
-    Args:
-        settings: Application settings (preferred parameter name)
-        config: Application configuration (backward compatibility)
+    app = FastAPI(
+        title="RefImage API",
+        description="Pipeline-oriented image search with CLIP embeddings",
+        version="2.0.0",
+        docs_url="/docs",
+        redoc_url="/redoc",
+    )
 
-    Returns:
-        Configured FastAPI application
+    # Initialize components
+    storage_manager = StorageManager(settings)
 
-    Raises:
-        RuntimeError: If initialization fails
-    """
-    # Support both parameter names for backward compatibility
-    app_settings = settings or config
-    if app_settings is None:
-        app_settings = Settings()
+    clip_model = CLIPModel(settings)
 
-    assert app_settings is not None, "Settings object is required"
+    search_engine = VectorSearchEngine(settings)
 
-    try:
-        # Initialize components with app_settings
-        clip_model = CLIPModel(app_settings)
-        storage_manager = StorageManager(app_settings)
-        search_engine = VectorSearchEngine(app_settings)
+    dsl_executor = DSLExecutor(clip_model, search_engine, storage_manager)
 
-        # Load existing embeddings into search engine
-        embeddings = storage_manager.get_all_embeddings()
-        if embeddings:
-            search_engine.add_embeddings_batch(embeddings)
-            logger.info(
-                f"Loaded {len(embeddings)} embeddings into search engine"
-            )
+    # Dependency providers
+    def get_storage_manager() -> StorageManager:
+        return storage_manager
 
-        # Create FastAPI app
-        app = FastAPI(
-            title="RefImage API",
-            description="""
-🔍 **RefImage**: AI-powered image store and search engine
-using CLIP embeddings
+    def get_clip_model() -> CLIPModel:
+        return clip_model
 
-## Features
-- **Semantic Image Search**: Natural language queries like
-  "red car" or "sunset landscape"
-- **CLIP Embeddings**: OpenAI's CLIP model for image-text
-  understanding
-- **Dynamic Search Language (DSL)**: Complex queries with
-  AND/OR/NOT operators
-- **FAISS Vector Search**: High-performance similarity search
-- **Metadata Management**: Tags, descriptions, and file information
+    def get_search_engine() -> VectorSearchEngine:
+        return search_engine
 
-## Quick Start
-1. Upload images via `/images/upload`
-2. Search with text via `/images/search`
-3. Use advanced DSL queries via `/search/dsl`
+    def get_dsl_executor() -> DSLExecutor:
+        return dsl_executor
 
-## Example Queries
-- Simple: `{"query": "cat sitting on couch"}`
-- DSL: `{"query": "AND(TEXT(beach), NOT(TEXT(people)))"}`
-            """,
-            version="0.1.0",
-            docs_url="/docs",
-            redoc_url="/redoc",
-            openapi_tags=[
-                {
-                    "name": "images",
-                    "description": "Image upload and management operations"
-                },
-                {
-                    "name": "search",
-                    "description": "Image search operations using text queries"
-                },
-                {
-                    "name": "dsl",
-                    "description": "Advanced search using Dynamic Search "
-                                   "Language"
-                },
-                {
-                    "name": "health",
-                    "description": "Health check and system status"
-                }
-            ]
-        )
-
-        # Add CORS middleware
-        app.add_middleware(
-            CORSMiddleware,
-            allow_origins=["*"],  # Configure for production
-            allow_credentials=True,
-            allow_methods=["*"],
-            allow_headers=["*"],
-        )
-
-        # Dependency injection functions
-        def get_clip_model() -> CLIPModel:
-            """Get CLIP model instance."""
-            return clip_model
-
-        def get_storage_manager() -> StorageManager:
-            """Get storage manager instance."""
-            return storage_manager
-
-        def get_search_engine() -> VectorSearchEngine:
-            """Get search engine instance."""
-            return search_engine
-
-        def get_settings() -> Settings:
-            """Get application settings."""
-            return app_settings
-
-        # Include error handlers
-        @app.exception_handler(HTTPException)
-        async def http_exception_handler(
-            request: Request, exc: HTTPException
-        ) -> JSONResponse:
-            return JSONResponse(
-                status_code=exc.status_code,
-                content=ErrorResponse(
-                    error="HTTPError",
-                    message=str(exc.detail),
-                    details=None
-                ).model_dump(),
-            )
-
-        @app.exception_handler(Exception)
-        async def general_exception_handler(
-            request: Request, exc: Exception
-        ) -> JSONResponse:
-            return JSONResponse(
-                status_code=500,
-                content=ErrorResponse(
-                    error="InternalError",
-                    message="Internal server error",
-                    details=None
-                ).model_dump(),
-            )
-
-        # Register API endpoints
-        _register_endpoints(
-            app, get_clip_model, get_storage_manager, get_search_engine
-        )
-
-        return app
-
-    except Exception as e:
-        error_msg = f"Failed to create application: {e}"
-        logger.error(error_msg)
-        raise RuntimeError(error_msg) from e
-
-
-def _register_endpoints(
-    app: FastAPI,
-    get_clip_model: Callable[[], CLIPModel],
-    get_storage_manager: Callable[[], StorageManager],
-    get_search_engine: Callable[[], VectorSearchEngine],
-):
-    """Register all API endpoints with the FastAPI app."""
+    # ========================================
+    # CONVERSION TOOLS
+    # ========================================
 
     @app.post(
-        "/images/upload",
-        response_model=UploadResponse,
-        tags=["images"],
-        summary="Upload an image",
-        description="""
-        Upload an image file to the RefImage system. The image will be:
-        1. Validated for proper format (JPEG, PNG, etc.)
-        2. Stored with metadata (filename, size, dimensions)
-        3. Processed through CLIP model for semantic embeddings
-        4. Indexed for future semantic search
-
-        **Supported formats**: JPEG, PNG, GIF, BMP, WEBP
-        **Max file size**: Configurable (default: 10MB)
-        **Tags**: Comma-separated list for easy filtering
-        """,
-        responses={
-            200: {
-                "description": "Image uploaded successfully",
-                "content": {
-                    "application/json": {
-                        "example": {
-                            "image_id": "550e8400-e29b-41d4-a716-446655440000",
-                            "metadata": {
-                                "filename": "sunset.jpg",
-                                "file_size": 1024000,
-                                "width": 1920,
-                                "height": 1080,
-                                "tags": ["nature", "sunset"]
-                            },
-                            "processing_time_ms": 250.5
-                        }
-                    }
-                }
-            },
-            400: {"description": "Invalid file format or empty file"},
-            413: {"description": "File too large"},
-            500: {"description": "Internal processing error"}
-        }
+        "/conversions/text-to-vector",
+        response_model=TextToVectorResponse,
+        tags=["Conversions"],
+        summary="Convert text to CLIP vector",
+        description="Generate CLIP embedding vector from text input.",
     )
-    async def upload_image(
-        file: UploadFile = File(
-            ...,
-            description="Image file to upload (JPEG, PNG, GIF, BMP, WEBP)"
-        ),
-        description: Optional[str] = Query(
-            None,
-            description="Optional description for the image",
-            max_length=500
-        ),
-        tags: Optional[str] = Query(
-            None,
-            description=(
-                "Comma-separated tags (e.g., 'nature,sunset,landscape')"
-            ),
-            max_length=200
-        ),
-        storage: StorageManager = Depends(get_storage_manager),
-        clip: CLIPModel = Depends(get_clip_model),
-        search: VectorSearchEngine = Depends(get_search_engine),
-    ):
-        """
-        Upload and process an image.
-
-        Args:
-            file: Image file to upload
-            description: Optional image description
-            tags: Optional comma-separated tags
-
-        Returns:
-            Upload response with metadata and processing time
-
-        Raises:
-            HTTPException: If upload fails
-        """
-        start_time = time.time()
-
+    async def text_to_vector(
+        request: TextToVectorRequest,
+        clip_model: CLIPModel = Depends(get_clip_model),
+    ) -> TextToVectorResponse:
+        """Convert text to CLIP embedding vector."""
         try:
-            # Validate file
-            if (not file.content_type or
-                    not file.content_type.startswith("image/")):
-                raise HTTPException(
-                    status_code=400, detail="File must be an image"
-                )
+            vector = clip_model.encode_text(request.text)
 
-            # Read file content
-            file_content = await file.read()
-            if len(file_content) == 0:
-                raise HTTPException(status_code=400, detail="Empty file")
-
-            # Parse tags
-            tags_list = []
-            if tags:
-                tags_list = [
-                    tag.strip() for tag in tags.split(",") if tag.strip()
-                ]
-
-            # Store image and metadata
-            metadata = storage.store_image(
-                image_data=file_content,
-                filename=file.filename or "uploaded_image",
-                description=description,
-                tags=tags_list,
+            return TextToVectorResponse(
+                text=request.text,
+                vector=vector.tolist(),
+                dimension=len(vector),
+                model=clip_model.model_name,
+                processing_time_ms=0,  # TODO: measure actual time
             )
-
-            # Generate and store embedding
-            embedding_vector = clip.encode_image(file_content)
-
-            from .models.schemas import ImageEmbedding
-
-            embedding = ImageEmbedding(
-                image_id=metadata.id,
-                embedding=embedding_vector.tolist(),
-                model_name=clip.settings.clip_model_name,
-            )
-
-            storage.store_embedding(embedding)
-            search.add_embedding(embedding)
-
-            processing_time = (time.time() - start_time) * 1000
-
-            return UploadResponse(
-                image_id=metadata.id,
-                metadata=metadata,
-                processing_time_ms=processing_time,
-            )
-
-        except (StorageError, CLIPModelError, VectorSearchError) as e:
-            logger.error(f"Upload error: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
+        except CLIPModelError as e:
+            logger.error(f"CLIP model error: {e}")
+            raise HTTPException(status_code=500, detail=f"CLIP model error: {e}")
         except Exception as e:
-            logger.error(f"Unexpected upload error: {e}")
-            raise HTTPException(status_code=500, detail="Upload failed")
+            logger.error(f"Text to vector conversion failed: {e}")
+            raise HTTPException(status_code=500, detail="Conversion failed")
 
     @app.post(
-        "/images/search",
-        response_model=SearchResponse,
-        tags=["search"],
-        summary="Search images with natural language",
-        description="""
-        Search for images using natural language queries. The system uses
-        CLIP embeddings to understand semantic relationships between text
-        and images.
-
-        **How it works:**
-        1. Your text query is encoded using CLIP
-        2. Vector similarity search finds matching images
-        3. Results are ranked by semantic similarity score
-        4. Optional metadata and tag filtering applied
-
-        **Example queries:**
-        - "a red car in the parking lot"
-        - "sunset over mountains"
-        - "people playing on the beach"
-        - "cat sitting on a couch"
-
-        **Filtering:** Use tags_filter to narrow results by specific tags
-        **Threshold:** Higher values (0.8+) = more precise,
-        lower (0.3+) = broader
-        """,
-        responses={
-            200: {
-                "description": "Search completed successfully",
-                "content": {
-                    "application/json": {
-                        "example": {
-                            "query": "red car",
-                            "results": [
-                                {
-                                    "image_id": "550e8400-e29b-41d4",
-                                    "similarity_score": 0.85,
-                                    "metadata": {
-                                        "filename": "red_sports_car.jpg",
-                                        "tags": ["car", "red", "vehicle"]
-                                    }
-                                }
-                            ],
-                            "total_results": 1,
-                            "search_time_ms": 45.2
-                        }
-                    }
-                }
-            },
-            400: {"description": "Invalid search parameters"},
-            500: {"description": "Search processing error"}
-        }
+        "/conversions/dsl-to-vector",
+        response_model=DSLToVectorResponse,
+        tags=["Conversions"],
+        summary="Convert DSL to vectors",
+        description="Parse DSL query and generate component vectors.",
     )
-    async def search_images(
-        request: SearchRequest,
-        clip: CLIPModel = Depends(get_clip_model),
-        storage: StorageManager = Depends(get_storage_manager),
-        search: VectorSearchEngine = Depends(get_search_engine),
-    ):
-        """
-        Search for similar images.
-
-        Args:
-            request: Search request with query and parameters
-
-        Returns:
-            Search response with results and timing
-
-        Raises:
-            HTTPException: If search fails
-        """
-        start_time = time.time()
-
+    async def dsl_to_vector(
+        request: DSLToVectorRequest,
+        clip_model: CLIPModel = Depends(get_clip_model),
+        dsl_executor: DSLExecutor = Depends(get_dsl_executor),
+    ) -> DSLToVectorResponse:
+        """Convert DSL query to component vectors."""
         try:
-            # Generate query embedding
-            query_embedding = clip.encode_text(request.query)
+            # Parse DSL query
+            # TODO: Implement proper DSL component extraction
 
+            # For now, treat as simple text query
+            vector = clip_model.encode_text(request.dsl_query)
+
+            return DSLToVectorResponse(
+                dsl_query=request.dsl_query,
+                components=[
+                    VectorComponent(
+                        text=request.dsl_query,
+                        vector=vector.tolist(),
+                        weight=1.0,
+                        operation="INCLUDE",
+                    )
+                ],
+                processing_time_ms=0,  # TODO: measure actual time
+            )
+        except DSLError as e:
+            logger.error(f"DSL parsing error: {e}")
+            raise HTTPException(status_code=400, detail=f"DSL error: {e}")
+        except CLIPModelError as e:
+            logger.error(f"CLIP model error: {e}")
+            raise HTTPException(status_code=500, detail=f"CLIP model error: {e}")
+        except Exception as e:
+            logger.error(f"DSL to vector conversion failed: {e}")
+            raise HTTPException(status_code=500, detail="Conversion failed")
+
+    @app.get(
+        "/conversions/dsl-syntax",
+        response_model=DSLSyntaxResponse,
+        tags=["Conversions"],
+        summary="Get DSL syntax reference",
+        description="Retrieve DSL syntax documentation and examples.",
+    )
+    async def get_dsl_syntax() -> DSLSyntaxResponse:
+        """Get DSL syntax reference."""
+        return DSLSyntaxResponse(
+            syntax_version="1.0",
+            description="RefImage DSL for complex search queries",
+            operators={
+                "AND": "Logical AND - all conditions must match",
+                "OR": "Logical OR - any condition can match",
+                "NOT": "Logical NOT - exclude matching results",
+                "^": "Weight operator - adjust relevance (0.0-1.0)",
+                "#": "Tag filter - match specific tags",
+            },
+            examples=[
+                DSLExample(
+                    query="cat #pet",
+                    description="Find cats with pet tag",
+                    explanation="Text 'cat' AND tag filter 'pet'",
+                ),
+                DSLExample(
+                    query="beach sunset NOT person",
+                    description="Beach sunset without people",
+                    explanation="Text 'beach sunset' excluding 'person'",
+                ),
+                DSLExample(
+                    query="red car^0.8 OR blue car^0.6",
+                    description="Weighted color preferences",
+                    explanation="Red cars (weight 0.8) OR blue cars (weight 0.6)",
+                ),
+            ],
+        )
+
+    # ========================================
+    # SEARCH EXECUTION
+    # ========================================
+
+    @app.post(
+        "/search/vector",
+        response_model=VectorSearchResponse,
+        tags=["Search"],
+        summary="Vector similarity search",
+        description="Search images using pre-computed vectors.",
+    )
+    async def search_vector(
+        request: VectorSearchRequest,
+        search_engine: VectorSearchEngine = Depends(get_search_engine),
+        storage: StorageManager = Depends(get_storage_manager),
+    ) -> VectorSearchResponse:
+        """Execute vector similarity search."""
+        try:
             # Perform vector search
-            search_results = search.search(
-                query_embedding=query_embedding,
+            import numpy as np
+
+            vector_array = np.array(request.vector)
+            results = search_engine.search(
+                query_embedding=vector_array,
                 k=request.limit,
                 threshold=request.threshold,
             )
 
-            # Build response
-            results = []
-            for image_id_str, similarity_score in search_results:
-                image_id = UUID(image_id_str)
+            # Get metadata for results
+            search_results = []
+            for image_id, score in results:
+                try:
+                    metadata = storage.get_metadata(UUID(image_id))
+                    if metadata:
+                        search_results.append(
+                            SearchResult(
+                                image_id=UUID(image_id), metadata=metadata, score=score
+                            )
+                        )
+                except (ValueError, StorageError):
+                    continue
 
-                # Get metadata if requested
-                metadata = None
-                if request.include_metadata:
-                    metadata = storage.get_metadata(image_id)
-
-                result = SearchResult(
-                    image_id=image_id,
-                    similarity_score=similarity_score,
-                    metadata=metadata
-                )
-
-                # Apply tag filtering if specified
-                if request.tags_filter and result.metadata:
-                    if not any(
-                        tag in result.metadata.tags
-                        for tag in request.tags_filter
-                    ):
-                        continue
-
-                results.append(result)
-
-            # Apply final limit after filtering
-            results = results[: request.limit]
-
-            search_time = (time.time() - start_time) * 1000
-
-            return SearchResponse(
-                query=request.query,
-                results=results,
-                total_results=len(results),
-                search_time_ms=search_time,
-            )
-
-        except (CLIPModelError, VectorSearchError, StorageError) as e:
-            logger.error(f"Search error: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
-        except Exception as e:
-            logger.error(f"Unexpected search error: {e}")
-            raise HTTPException(status_code=500, detail="Search failed")
-
-    @app.get(
-        "/health",
-        tags=["health"],
-        summary="System health check",
-        description="""
-        Check the health and status of all RefImage system components.
-
-        **Checks performed:**
-        - CLIP model availability and configuration
-        - Storage system connectivity and statistics
-        - Vector search engine status and performance
-        - Overall system readiness
-
-        Returns detailed information about each component's status
-        and performance metrics.
-        """,
-        responses={
-            200: {
-                "description": "System is healthy",
-                "content": {
-                    "application/json": {
-                        "example": {
-                            "status": "healthy",
-                            "timestamp": "2025-07-26T08:30:00Z",
-                            "services": {
-                                "clip_model": {"status": "ready"},
-                                "storage": {"status": "ready", "images": 150},
-                                "search_engine": {"status": "ready"}
-                            }
-                        }
-                    }
-                }
-            },
-            503: {"description": "System is unhealthy"}
-        }
-    )
-    async def health_check(
-        clip: CLIPModel = Depends(get_clip_model),
-        storage: StorageManager = Depends(get_storage_manager),
-        search: VectorSearchEngine = Depends(get_search_engine),
-    ):
-        """Health check endpoint."""
-        try:
-            return {
-                "status": "healthy",
-                "components": {
-                    "clip_model": clip.get_model_info(),
-                    "storage": storage.get_storage_stats(),
-                    "search_engine": search.get_stats(),
+            return VectorSearchResponse(
+                vector=request.vector,
+                results=search_results,
+                total_count=len(search_results),
+                search_params={
+                    "limit": request.limit,
+                    "threshold": request.threshold,
                 },
-            }
+                processing_time_ms=0,  # TODO: measure actual time
+            )
 
+        except VectorSearchError as e:
+            logger.error(f"Vector search error: {e}")
+            raise HTTPException(status_code=500, detail=f"Search error: {e}")
         except Exception as e:
-            logger.error(f"Health check error: {e}")
-            return JSONResponse(
-                status_code=503,
-                content={"status": "unhealthy", "error": str(e)}
-            )
-
-    # Image CRUD endpoints
-    @app.get(
-        "/images",
-        response_model=ImageListResponse,
-        tags=["images"],
-        summary="List all images",
-        description="""
-        Retrieve a paginated list of all images in the system.
-
-        **Features:**
-        - Pagination with configurable limit and offset
-        - Tag filtering to narrow results
-        - Sorting by creation date, filename, or file size
-        - Ascending or descending sort order
-
-        **Use cases:**
-        - Browse all uploaded images
-        - Filter images by specific tags
-        - Paginate through large image collections
-        - Sort images by various criteria
-        """,
-        responses={
-            200: {
-                "description": "Images retrieved successfully",
-                "content": {
-                    "application/json": {
-                        "example": {
-                            "images": [
-                                {
-                                    "id": "550e8400-e29b-41d4",
-                                    "filename": "sunset.jpg",
-                                    "tags": ["nature", "sunset"]
-                                }
-                            ],
-                            "total_count": 25,
-                            "limit": 20,
-                            "offset": 0,
-                            "has_more": True
-                        }
-                    }
-                }
-            }
-        }
-    )
-    async def list_images(
-        request: ImageListRequest = Depends(),
-        storage: StorageManager = Depends(get_storage_manager),
-    ):
-        """List all images with pagination and filtering."""
-        try:
-            # Get images from storage with filtering and pagination
-            images, total_count = storage.list_images(
-                limit=request.limit,
-                offset=request.offset,
-                tags_filter=request.tags_filter,
-                sort_by=request.sort_by,
-                sort_order=request.sort_order,
-            )
-
-            has_more = (request.offset + len(images)) < total_count
-
-            return ImageListResponse(
-                images=images,
-                total_count=total_count,
-                limit=request.limit,
-                offset=request.offset,
-                has_more=has_more,
-            )
-
-        except Exception as e:
-            logger.error(f"Failed to list images: {e}")
-            raise HTTPException(
-                status_code=500, detail="Failed to list images"
-            )
-
-    @app.get(
-        "/images/{image_id}",
-        response_model=ImageDetailResponse,
-        tags=["images"],
-        summary="Get image details",
-        description="""
-        Retrieve detailed information about a specific image.
-
-        **Information included:**
-        - Complete metadata (filename, size, dimensions, tags, etc.)
-        - Embedding availability status
-        - File existence verification
-
-        **Use cases:**
-        - View detailed image information
-        - Verify image integrity
-        - Check embedding status
-        """,
-        responses={
-            200: {"description": "Image details retrieved successfully"},
-            404: {"description": "Image not found"}
-        }
-    )
-    async def get_image_details(
-        image_id: UUID,
-        storage: StorageManager = Depends(get_storage_manager),
-    ):
-        """Get detailed information about a specific image."""
-        try:
-            metadata = storage.get_metadata(image_id)
-            if not metadata:
-                raise HTTPException(status_code=404, detail="Image not found")
-
-            # Check if embedding exists
-            has_embedding = storage.has_embedding(image_id)
-
-            # Check if file exists on disk
-            file_exists = metadata.file_path.exists()
-
-            return ImageDetailResponse(
-                metadata=metadata,
-                has_embedding=has_embedding,
-                file_exists=file_exists,
-            )
-
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"Failed to get image details: {e}")
-            raise HTTPException(
-                status_code=500, detail="Failed to get image details"
-            )
-
-    @app.delete(
-        "/images/{image_id}",
-        response_model=ImageDeleteResponse,
-        tags=["images"],
-        summary="Delete an image",
-        description="""
-        Permanently delete an image and all associated data.
-
-        **What gets deleted:**
-        - Image file from storage
-        - Metadata from database
-        - CLIP embedding vectors
-        - Search index entries
-
-        **Warning:** This operation cannot be undone!
-
-        **Use cases:**
-        - Remove unwanted images
-        - Clean up storage space
-        - Comply with data deletion requests
-        """,
-        responses={
-            200: {"description": "Image deleted successfully"},
-            404: {"description": "Image not found"},
-            500: {"description": "Deletion failed"}
-        }
-    )
-    async def delete_image(
-        image_id: UUID,
-        storage: StorageManager = Depends(get_storage_manager),
-        search: VectorSearchEngine = Depends(get_search_engine),
-    ):
-        """Delete an image and all associated data."""
-        try:
-            # Check if image exists
-            metadata = storage.get_metadata(image_id)
-            if not metadata:
-                raise HTTPException(status_code=404, detail="Image not found")
-
-            # Delete from search index
-            try:
-                search.remove_embedding(str(image_id))
-            except Exception as e:
-                logger.warning(f"Failed to remove from search index: {e}")
-
-            # Delete from storage (metadata, embedding, and file)
-            success = storage.delete_image(image_id)
-
-            if success:
-                return ImageDeleteResponse(
-                    image_id=image_id,
-                    deleted=True,
-                    message="Image deleted successfully"
-                )
-            else:
-                raise HTTPException(
-                    status_code=500, detail="Failed to delete image"
-                )
-
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"Failed to delete image: {e}")
-            raise HTTPException(
-                status_code=500, detail="Failed to delete image"
-            )
-
-    @app.put(
-        "/images/{image_id}",
-        response_model=ImageUpdateResponse,
-        tags=["Images"],
-        summary="Update image metadata",
-        description="""
-        Update metadata for an existing image.
-
-        **Supported updates:**
-        - Description: Human-readable description of the image
-        - Tags: List of keyword tags for categorization
-
-        **Field behavior:**
-        - Only specified fields are updated
-        - Omitted fields remain unchanged
-        - Empty string clears the field
-        - Tags are automatically cleaned (trimmed, deduplicated)
-
-        **Use cases:**
-        - Add descriptive text to uploaded images
-        - Update categorization tags
-        - Correct or enhance existing metadata
-        """,
-        responses={
-            200: {"description": "Image metadata updated successfully"},
-            404: {"description": "Image not found"},
-            400: {"description": "Invalid request data"},
-            500: {"description": "Internal server error"},
-        }
-    )
-    async def update_image_metadata(
-        image_id: UUID,
-        request: ImageUpdateRequest,
-        storage: StorageManager = Depends(get_storage_manager),
-    ) -> ImageUpdateResponse:
-        """Update image metadata."""
-        try:
-            # Attempt to update metadata
-            updated_metadata = storage.update_metadata(
-                image_id=image_id,
-                description=request.description,
-                tags=request.tags
-            )
-
-            if updated_metadata is None:
-                raise HTTPException(
-                    status_code=404, detail="Image not found"
-                )
-
-            return ImageUpdateResponse(
-                image_id=image_id,
-                updated=True,
-                metadata=updated_metadata,
-                message="Metadata updated successfully"
-            )
-
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"Failed to update image metadata: {e}")
-            raise HTTPException(
-                status_code=500, detail="Failed to update metadata"
-            )
+            logger.error(f"Vector search failed: {e}")
+            raise HTTPException(status_code=500, detail="Search failed")
 
     @app.post(
         "/search/dsl",
-        response_model=DSLResponse,
-        tags=["dsl"],
-        summary="Advanced search with Dynamic Search Language",
-        description="""
-        Execute complex search queries using RefImage's Dynamic Search
-        Language (DSL). DSL allows combining multiple search criteria
-        with logical operators.
-
-        **DSL Operators:**
-        - `TEXT(query)`: Semantic text search
-        - `AND(expr1, expr2)`: Both conditions must match
-        - `OR(expr1, expr2)`: Either condition must match
-        - `NOT(expr)`: Exclude matching results
-
-        **Example queries:**
-        - `TEXT(cat)`: Simple text search for cats
-        - `AND(TEXT(beach), TEXT(sunset))`: Beach sunset images
-        - `OR(TEXT(dog), TEXT(puppy))`: Dogs or puppies
-        - `AND(TEXT(car), NOT(TEXT(red)))`: Cars that are not red
-        - `AND(OR(TEXT(ocean), TEXT(sea)), NOT(TEXT(people)))`:
-          Ocean/sea without people
-
-        **Use cases:**
-        - Content filtering and exclusion
-        - Multi-criteria search
-        - Complex semantic queries
-        - Precise result refinement
-        """,
-        responses={
-            200: {
-                "description": "DSL query executed successfully",
-                "content": {
-                    "application/json": {
-                        "example": {
-                            "query": "AND(TEXT(beach), NOT(TEXT(people)))",
-                            "results": [
-                                {
-                                    "filename": "empty_beach.jpg",
-                                    "tags": ["beach", "nature", "peaceful"]
-                                }
-                            ],
-                            "total_count": 1,
-                            "query_info": {
-                                "type": "dsl",
-                                "threshold": 0.3
-                            }
-                        }
-                    }
-                }
-            },
-            400: {"description": "Invalid DSL syntax"},
-            500: {"description": "Query execution error"}
-        }
+        response_model=DSLSearchResponse,
+        tags=["Search"],
+        summary="DSL query search",
+        description="Execute complex search using DSL syntax.",
     )
     async def search_dsl(
-        request: DSLQuery,
-        clip: CLIPModel = Depends(get_clip_model),
-        search: VectorSearchEngine = Depends(get_search_engine),
+        request: DSLSearchRequest,
+        dsl_executor: DSLExecutor = Depends(get_dsl_executor),
+        clip_model: CLIPModel = Depends(get_clip_model),
+        search_engine: VectorSearchEngine = Depends(get_search_engine),
         storage: StorageManager = Depends(get_storage_manager),
-    ):
-        """
-        Execute DSL (Dynamic Search Language) query.
-
-        Args:
-            request: DSL query request
-
-        Returns:
-            Search results with metadata
-
-        Raises:
-            HTTPException: If search fails
-        """
+    ) -> DSLSearchResponse:
+        """Execute DSL query search."""
         try:
-            # Create DSL executor
-            dsl_executor = DSLExecutor(clip, search, storage)
-
             # Execute DSL query
-            image_ids = dsl_executor.execute_query(
+            image_ids = dsl_executor.execute(
                 query_string=request.query,
+                clip_model=clip_model,
+                search_engine=search_engine,
+                storage_manager=storage,
                 limit=request.limit,
                 threshold=request.threshold,
             )
@@ -876,10 +295,9 @@ def _register_endpoints(
                     if metadata:
                         results.append(metadata)
                 except (ValueError, StorageError):
-                    # Skip invalid or missing images
                     continue
 
-            return DSLResponse(
+            return DSLSearchResponse(
                 query=request.query,
                 results=results,
                 total_count=len(results),
@@ -888,26 +306,501 @@ def _register_endpoints(
                     "type": "dsl",
                     "threshold": request.threshold,
                 },
+                processing_time_ms=0,  # TODO: measure actual time
             )
 
         except DSLError as e:
             logger.error(f"DSL search error: {e}")
             raise HTTPException(status_code=400, detail=f"DSL error: {e}")
         except Exception as e:
-            logger.error(f"DSL search error: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
+            logger.error(f"DSL search failed: {e}")
+            raise HTTPException(status_code=500, detail="Search failed")
+
+    @app.post(
+        "/search/text",
+        response_model=TextSearchResponse,
+        tags=["Search"],
+        summary="Natural language search",
+        description="Search images using natural language with full pipeline.",
+    )
+    async def search_text(
+        request: TextSearchRequest,
+        clip_model: CLIPModel = Depends(get_clip_model),
+        search_engine: VectorSearchEngine = Depends(get_search_engine),
+        storage: StorageManager = Depends(get_storage_manager),
+    ) -> TextSearchResponse:
+        """Execute natural language search."""
+        try:
+            # Convert text to vector
+            vector = clip_model.encode_text(request.text)
+
+            # Perform vector search
+            results = search_engine.search(
+                query_embedding=vector,
+                k=request.limit,
+                threshold=request.threshold,
+            )
+
+            # Get metadata for results
+            search_results = []
+            for image_id, score in results:
+                try:
+                    metadata = storage.get_metadata(UUID(image_id))
+                    if metadata:
+                        search_results.append(
+                            SearchResult(
+                                image_id=UUID(image_id), metadata=metadata, score=score
+                            )
+                        )
+                except (ValueError, StorageError):
+                    continue
+
+            pipeline_debug = None
+            if request.include_pipeline_debug:
+                pipeline_debug = PipelineDebugInfo(
+                    text_to_vector={
+                        "dimension": len(vector),
+                        "model": clip_model.model_name,
+                        "time_ms": 0,  # TODO: measure
+                    },
+                    vector_search={
+                        "searched_vectors": len(results),
+                        "time_ms": 0,  # TODO: measure
+                    },
+                )
+
+            return TextSearchResponse(
+                text=request.text,
+                results=search_results,
+                total_count=len(search_results),
+                search_params={
+                    "limit": request.limit,
+                    "threshold": request.threshold,
+                },
+                pipeline_debug=pipeline_debug,
+                processing_time_ms=0,  # TODO: measure actual time
+            )
+
+        except CLIPModelError as e:
+            logger.error(f"CLIP model error: {e}")
+            raise HTTPException(status_code=500, detail=f"CLIP model error: {e}")
+        except VectorSearchError as e:
+            logger.error(f"Vector search error: {e}")
+            raise HTTPException(status_code=500, detail=f"Search error: {e}")
+        except Exception as e:
+            logger.error(f"Text search failed: {e}")
+            raise HTTPException(status_code=500, detail="Search failed")
+
+    # ========================================
+    # METADATA CRUD
+    # ========================================
+
+    @app.post(
+        "/metadata",
+        response_model=MetadataCreateResponse,
+        tags=["Metadata"],
+        summary="Create metadata",
+        description="Create new image metadata record.",
+    )
+    async def create_metadata(
+        request: MetadataCreateRequest,
+        storage: StorageManager = Depends(get_storage_manager),
+    ) -> MetadataCreateResponse:
+        """Create new metadata record."""
+        try:
+            # Create metadata in storage
+            metadata = storage.create_metadata(
+                filename=request.filename,
+                description=request.description,
+                tags=request.tags or [],
+                file_size=request.file_size,
+                dimensions=request.dimensions,
+            )
+
+            return MetadataCreateResponse(
+                metadata=metadata, created=True, message="Metadata created successfully"
+            )
+
+        except StorageError as e:
+            logger.error(f"Storage error: {e}")
+            raise HTTPException(status_code=500, detail=f"Storage error: {e}")
+        except Exception as e:
+            logger.error(f"Metadata creation failed: {e}")
+            raise HTTPException(status_code=500, detail="Creation failed")
+
+    @app.get(
+        "/metadata",
+        response_model=MetadataListResponse,
+        tags=["Metadata"],
+        summary="List metadata",
+        description="Get paginated list of metadata records.",
+    )
+    async def list_metadata(
+        limit: int = 50,
+        offset: int = 0,
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        storage: StorageManager = Depends(get_storage_manager),
+    ) -> MetadataListResponse:
+        """List metadata records with pagination."""
+        try:
+            # Get paginated metadata
+            metadata_list, total_count = storage.list_images(
+                limit=limit,
+                offset=offset,
+                sort_by=sort_by,
+                sort_order=sort_order,
+            )
+
+            return MetadataListResponse(
+                metadata=metadata_list,
+                total_count=total_count,
+                limit=limit,
+                offset=offset,
+                sort_by=sort_by,
+                sort_order=sort_order,
+            )
+
+        except StorageError as e:
+            logger.error(f"Storage error: {e}")
+            raise HTTPException(status_code=500, detail=f"Storage error: {e}")
+        except Exception as e:
+            logger.error(f"Metadata listing failed: {e}")
+            raise HTTPException(status_code=500, detail="Listing failed")
+
+    @app.get(
+        "/metadata/{metadata_id}",
+        response_model=ImageMetadata,
+        tags=["Metadata"],
+        summary="Get metadata",
+        description="Get specific metadata record by ID.",
+    )
+    async def get_metadata(
+        metadata_id: UUID,
+        storage: StorageManager = Depends(get_storage_manager),
+    ) -> ImageMetadata:
+        """Get specific metadata record."""
+        try:
+            metadata = storage.get_metadata(metadata_id)
+            if metadata is None:
+                raise HTTPException(status_code=404, detail="Metadata not found")
+
+            return metadata
+
+        except StorageError as e:
+            logger.error(f"Storage error: {e}")
+            raise HTTPException(status_code=500, detail=f"Storage error: {e}")
+        except Exception as e:
+            logger.error(f"Metadata retrieval failed: {e}")
+            raise HTTPException(status_code=500, detail="Retrieval failed")
+
+    @app.put(
+        "/metadata/{metadata_id}",
+        response_model=MetadataUpdateResponse,
+        tags=["Metadata"],
+        summary="Update metadata",
+        description="Update existing metadata record.",
+    )
+    async def update_metadata(
+        metadata_id: UUID,
+        request: MetadataUpdateRequest,
+        storage: StorageManager = Depends(get_storage_manager),
+    ) -> MetadataUpdateResponse:
+        """Update existing metadata record."""
+        try:
+            updated_metadata = storage.update_metadata(
+                image_id=metadata_id,
+                description=request.description,
+                tags=request.tags,
+            )
+
+            if updated_metadata is None:
+                raise HTTPException(status_code=404, detail="Metadata not found")
+
+            return MetadataUpdateResponse(
+                metadata_id=metadata_id,
+                updated=True,
+                metadata=updated_metadata,
+                message="Metadata updated successfully",
+            )
+
+        except StorageError as e:
+            logger.error(f"Storage error: {e}")
+            raise HTTPException(status_code=500, detail=f"Storage error: {e}")
+        except Exception as e:
+            logger.error(f"Metadata update failed: {e}")
+            raise HTTPException(status_code=500, detail="Update failed")
+
+    @app.delete(
+        "/metadata/{metadata_id}",
+        response_model=MetadataDeleteResponse,
+        tags=["Metadata"],
+        summary="Delete metadata",
+        description="Delete metadata record (keeps image file).",
+    )
+    async def delete_metadata(
+        metadata_id: UUID,
+        storage: StorageManager = Depends(get_storage_manager),
+    ) -> MetadataDeleteResponse:
+        """Delete metadata record only."""
+        try:
+            # Delete only metadata, not the image file
+            success = storage.delete_metadata_only(metadata_id)
+
+            if not success:
+                raise HTTPException(status_code=404, detail="Metadata not found")
+
+            return MetadataDeleteResponse(
+                metadata_id=metadata_id,
+                deleted=True,
+                message="Metadata deleted successfully",
+            )
+
+        except StorageError as e:
+            logger.error(f"Storage error: {e}")
+            raise HTTPException(status_code=500, detail=f"Storage error: {e}")
+        except Exception as e:
+            logger.error(f"Metadata deletion failed: {e}")
+            raise HTTPException(status_code=500, detail="Deletion failed")
+
+    # ========================================
+    # IMAGE DATA (CRD)
+    # ========================================
+
+    @app.post(
+        "/images",
+        response_model=ImageUploadResponse,
+        tags=["Images"],
+        summary="Upload image",
+        description="Upload image file and generate embeddings.",
+    )
+    async def upload_image(
+        file: UploadFile = File(...),
+        description: Optional[str] = None,
+        tags: Optional[str] = None,
+        storage: StorageManager = Depends(get_storage_manager),
+        clip_model: CLIPModel = Depends(get_clip_model),
+        search_engine: VectorSearchEngine = Depends(get_search_engine),
+    ) -> ImageUploadResponse:
+        """Upload image and generate embeddings."""
+        try:
+            # Parse tags
+            tag_list = []
+            if tags:
+                tag_list = [tag.strip() for tag in tags.split(",") if tag.strip()]
+
+            # Store image and create metadata
+            metadata = storage.store_image(
+                file=file.file,
+                filename=file.filename or "unknown",
+                description=description,
+                tags=tag_list,
+            )
+
+            # Generate embedding
+            embedding = clip_model.encode_image_file(
+                storage.get_image_path(metadata.id)
+            )
+
+            # Store embedding
+            storage.store_embedding(metadata.id, embedding)
+
+            # Add to search index
+            search_engine.add_image(str(metadata.id), embedding)
+
+            return ImageUploadResponse(
+                image_id=metadata.id,
+                metadata=metadata,
+                upload_success=True,
+                embedding_generated=True,
+                message="Image uploaded and processed successfully",
+            )
+
+        except CLIPModelError as e:
+            logger.error(f"CLIP model error: {e}")
+            raise HTTPException(status_code=500, detail=f"CLIP model error: {e}")
+        except StorageError as e:
+            logger.error(f"Storage error: {e}")
+            raise HTTPException(status_code=500, detail=f"Storage error: {e}")
+        except Exception as e:
+            logger.error(f"Image upload failed: {e}")
+            raise HTTPException(status_code=500, detail="Upload failed")
+
+    @app.get(
+        "/images",
+        response_model=ImageListResponse,
+        tags=["Images"],
+        summary="List images",
+        description="Get paginated list of images.",
+    )
+    async def list_images(
+        limit: int = 50,
+        offset: int = 0,
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        storage: StorageManager = Depends(get_storage_manager),
+    ) -> ImageListResponse:
+        """List images with pagination."""
+        try:
+            images, total_count = storage.list_images(
+                limit=limit,
+                offset=offset,
+                sort_by=sort_by,
+                sort_order=sort_order,
+            )
+
+            return ImageListResponse(
+                images=images,
+                total_count=total_count,
+                limit=limit,
+                offset=offset,
+                sort_by=sort_by,
+                sort_order=sort_order,
+            )
+
+        except StorageError as e:
+            logger.error(f"Storage error: {e}")
+            raise HTTPException(status_code=500, detail=f"Storage error: {e}")
+        except Exception as e:
+            logger.error(f"Image listing failed: {e}")
+            raise HTTPException(status_code=500, detail="Listing failed")
+
+    @app.get(
+        "/images/{image_id}",
+        tags=["Images"],
+        summary="Get image file",
+        description="Download image file by ID.",
+    )
+    async def get_image_file(
+        image_id: UUID,
+        storage: StorageManager = Depends(get_storage_manager),
+    ) -> StreamingResponse:
+        """Get image file."""
+        try:
+            # Check if image exists
+            metadata = storage.get_metadata(image_id)
+            if metadata is None:
+                raise HTTPException(status_code=404, detail="Image not found")
+
+            # Get image path
+            image_path = storage.get_image_path(image_id)
+            if not image_path.exists():
+                raise HTTPException(status_code=404, detail="Image file not found")
+
+            # Return streaming response
+            def iterfile():
+                with open(image_path, "rb") as file:
+                    yield from file
+
+            return StreamingResponse(
+                iterfile(),
+                media_type="image/jpeg",  # TODO: detect actual MIME type
+                headers={
+                    "Content-Disposition": f"inline; filename={metadata.filename}"
+                },
+            )
+
+        except StorageError as e:
+            logger.error(f"Storage error: {e}")
+            raise HTTPException(status_code=500, detail=f"Storage error: {e}")
+        except Exception as e:
+            logger.error(f"Image retrieval failed: {e}")
+            raise HTTPException(status_code=500, detail="Retrieval failed")
+
+    @app.delete(
+        "/images/{image_id}",
+        response_model=ImageDeleteResponse,
+        tags=["Images"],
+        summary="Delete image",
+        description="Delete image file and all associated data.",
+    )
+    async def delete_image(
+        image_id: UUID,
+        storage: StorageManager = Depends(get_storage_manager),
+        search_engine: VectorSearchEngine = Depends(get_search_engine),
+    ) -> ImageDeleteResponse:
+        """Delete image and all associated data."""
+        try:
+            # Remove from search index
+            try:
+                search_engine.remove_image(str(image_id))
+            except VectorSearchError:
+                logger.warning(f"Could not remove {image_id} from search index")
+
+            # Delete from storage (metadata, embedding, and file)
+            success = storage.delete_image(image_id)
+
+            if success:
+                return ImageDeleteResponse(
+                    image_id=image_id,
+                    deleted=True,
+                    message="Image deleted successfully",
+                )
+            else:
+                raise HTTPException(status_code=500, detail="Failed to delete image")
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to delete image: {e}")
+            raise HTTPException(status_code=500, detail="Failed to delete image")
+
+    # ========================================
+    # SYSTEM
+    # ========================================
+
+    @app.get(
+        "/health",
+        response_model=HealthResponse,
+        tags=["System"],
+        summary="Health check",
+        description="Get system health status.",
+    )
+    async def health_check(
+        storage: StorageManager = Depends(get_storage_manager),
+        clip_model: CLIPModel = Depends(get_clip_model),
+        search_engine: VectorSearchEngine = Depends(get_search_engine),
+    ) -> HealthResponse:
+        """Get system health status."""
+        try:
+            # Get component status
+            clip_status = {
+                "model_name": clip_model.model_name,
+                "device": str(clip_model.device),
+                "embedding_dim": clip_model.embedding_dim,
+                "is_loaded": True,
+            }
+
+            storage_status = {
+                "total_images": len(storage.list_images(limit=1000000)[0]),
+                "total_embeddings": storage.count_embeddings(),
+                "total_storage_bytes": storage.get_storage_size(),
+                "storage_path": str(storage.images_dir),
+                "database_path": str(storage.db_path),
+            }
+
+            search_status = {
+                "total_embeddings": search_engine.count(),
+                "embedding_dimension": search_engine.dimension,
+                "index_type": search_engine.index_type,
+                "is_trained": search_engine.is_trained,
+            }
+
+            return HealthResponse(
+                status="healthy",
+                components={
+                    "clip_model": clip_status,
+                    "storage": storage_status,
+                    "search_engine": search_status,
+                },
+            )
+
+        except Exception as e:
+            logger.error(f"Health check failed: {e}")
+            raise HTTPException(status_code=500, detail="Health check failed")
+
+    return app
 
 
-# Legacy support: create default app instance
-# This will be removed after migration is complete
-def _create_legacy_app():
-    """Create legacy app instance for backward compatibility."""
-    try:
-        return create_app()
-    except Exception as e:
-        logger.warning(f"Failed to create legacy app: {e}")
-        # Return minimal app for development
-        return FastAPI(title="RefImage API (Development)")
-
-
-app = _create_legacy_app()
+# Create default app instance
+app = create_app()

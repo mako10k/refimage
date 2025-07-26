@@ -139,9 +139,7 @@ class StorageManager:
                 sha256_hash.update(chunk)
         return sha256_hash.hexdigest()
 
-    def _create_image_metadata_from_row(
-        self, row: sqlite3.Row
-    ) -> ImageMetadata:
+    def _create_image_metadata_from_row(self, row: sqlite3.Row) -> ImageMetadata:
         """
         Create ImageMetadata instance from database row.
 
@@ -203,9 +201,7 @@ class StorageManager:
                 "BMP": "image/bmp",
                 "WEBP": "image/webp",
             }
-            mime_type = format_map.get(
-                image.format, "application/octet-stream"
-            )
+            mime_type = format_map.get(image.format, "application/octet-stream")
 
             # Generate unique file path
             file_extension = Path(filename).suffix
@@ -406,7 +402,7 @@ class StorageManager:
         self,
         image_id: UUID,
         description: Optional[str] = None,
-        tags: Optional[List[str]] = None
+        tags: Optional[List[str]] = None,
     ) -> Optional[ImageMetadata]:
         """
         Update image metadata.
@@ -454,8 +450,7 @@ class StorageManager:
 
                 # Perform update
                 update_query = (
-                    f"UPDATE images SET {', '.join(update_fields)} "
-                    f"WHERE id = ?"
+                    f"UPDATE images SET {', '.join(update_fields)} " f"WHERE id = ?"
                 )
                 params.append(str(image_id))
 
@@ -636,9 +631,7 @@ class StorageManager:
 
                 embeddings = []
                 for row in cursor.fetchall():
-                    embedding_vector = json.loads(
-                        row["embedding"].decode("utf-8")
-                    )
+                    embedding_vector = json.loads(row["embedding"].decode("utf-8"))
 
                     embedding = ImageEmbedding(
                         image_id=UUID(row["image_id"]),
@@ -712,3 +705,129 @@ class StorageManager:
         except Exception as e:
             logger.error(f"Failed to get storage stats: {e}")
             return {}
+
+    def create_metadata(
+        self,
+        filename: str,
+        description: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        file_size: int = 0,
+        dimensions: Optional[Tuple[int, int]] = None,
+    ) -> ImageMetadata:
+        """
+        Create metadata record without image file.
+
+        Args:
+            filename: Image filename
+            description: Image description
+            tags: Image tags
+            file_size: File size in bytes
+            dimensions: Image dimensions (width, height)
+
+        Returns:
+            Created metadata
+
+        Raises:
+            StorageError: If creation fails
+        """
+        assert filename is not None, "Filename is required"
+        assert file_size >= 0, "File size must be non-negative"
+
+        try:
+            from uuid import uuid4
+
+            image_id = uuid4()
+
+            # Prepare dimensions
+            dimensions_dict = None
+            if dimensions:
+                dimensions_dict = {"width": dimensions[0], "height": dimensions[1]}
+
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute(
+                    """
+                    INSERT INTO images
+                    (id, filename, description, tags, file_size, dimensions,
+                     created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        str(image_id),
+                        filename,
+                        description,
+                        json.dumps(tags or []),
+                        file_size,
+                        (json.dumps(dimensions_dict) if dimensions_dict else None),
+                        datetime.utcnow().isoformat(),
+                    ),
+                )
+                conn.commit()
+
+            # Return created metadata
+            metadata = self.get_metadata(image_id)
+            if metadata is None:
+                raise StorageError("Failed to retrieve created metadata")
+            return metadata
+
+        except Exception as e:
+            error_msg = f"Failed to create metadata: {e}"
+            logger.error(error_msg)
+            raise StorageError(error_msg) from e
+
+    def delete_metadata_only(self, image_id: UUID) -> bool:
+        """
+        Delete metadata record without deleting image file.
+
+        Args:
+            image_id: Image identifier
+
+        Returns:
+            True if successful, False if not found
+        """
+        assert image_id is not None, "Image ID is required"
+
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute(
+                    "DELETE FROM images WHERE id = ?", (str(image_id),)
+                )
+                conn.commit()
+                return cursor.rowcount > 0
+
+        except Exception as e:
+            error_msg = f"Failed to delete metadata: {e}"
+            logger.error(error_msg)
+            raise StorageError(error_msg) from e
+
+    def count_embeddings(self) -> int:
+        """
+        Count total number of embeddings.
+
+        Returns:
+            Number of embeddings
+        """
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute("SELECT COUNT(*) FROM embeddings")
+                return cursor.fetchone()[0]
+
+        except Exception as e:
+            logger.error(f"Failed to count embeddings: {e}")
+            return 0
+
+    def get_storage_size(self) -> int:
+        """
+        Get total storage size in bytes.
+
+        Returns:
+            Total size in bytes
+        """
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.execute("SELECT SUM(file_size) FROM images")
+                result = cursor.fetchone()[0]
+                return result or 0
+
+        except Exception as e:
+            logger.error(f"Failed to get storage size: {e}")
+            return 0
