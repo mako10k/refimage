@@ -2,8 +2,2092 @@
   "openapi": "3.1.0",
   "info": {
     "title": "RefImage API",
-    "description": "Image store and search engine with CLIP embeddings",
-    "version": "0.1.0"
+    "description": "Pipeline-oriented image search with CLIP embeddings",
+    "version": "2.0.0"
   },
-  "paths": {}
+  "paths": {
+    "/conversions/text-to-vector": {
+      "post": {
+        "tags": [
+          "Conversions"
+        ],
+        "summary": "Convert text to CLIP vector",
+        "description": "Generate CLIP embedding vector from text input.",
+        "operationId": "text_to_vector_conversions_text_to_vector_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TextToVectorRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TextToVectorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/conversions/dsl-to-vector": {
+      "post": {
+        "tags": [
+          "Conversions"
+        ],
+        "summary": "Convert DSL to vectors",
+        "description": "Parse DSL query and generate component vectors.",
+        "operationId": "dsl_to_vector_conversions_dsl_to_vector_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DSLToVectorRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DSLToVectorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/conversions/dsl-syntax": {
+      "get": {
+        "tags": [
+          "Conversions"
+        ],
+        "summary": "Get DSL syntax reference",
+        "description": "Retrieve DSL syntax documentation and examples.",
+        "operationId": "get_dsl_syntax_conversions_dsl_syntax_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DSLSyntaxResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/conversions/text-to-dsl": {
+      "post": {
+        "tags": [
+          "Conversions"
+        ],
+        "summary": "Convert natural language to DSL using LLM",
+        "description": "Use LLM to convert natural language queries to DSL format.",
+        "operationId": "text_to_dsl_conversions_text_to_dsl_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TextToDSLRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TextToDSLResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/llm/providers": {
+      "get": {
+        "tags": [
+          "LLM"
+        ],
+        "summary": "List available LLM providers",
+        "description": "Get information about available LLM providers.",
+        "operationId": "list_llm_providers_llm_providers_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LLMProvidersResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/llm/switch": {
+      "post": {
+        "tags": [
+          "LLM"
+        ],
+        "summary": "Switch LLM provider",
+        "description": "Switch to a different LLM provider.",
+        "operationId": "switch_llm_provider_llm_switch_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LLMSwitchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LLMSwitchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/search/vector": {
+      "post": {
+        "tags": [
+          "Search"
+        ],
+        "summary": "Vector similarity search",
+        "description": "Search images using pre-computed vectors.",
+        "operationId": "search_vector_search_vector_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VectorSearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VectorSearchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/search/dsl": {
+      "post": {
+        "tags": [
+          "Search"
+        ],
+        "summary": "DSL query search",
+        "description": "Execute complex search using DSL syntax.",
+        "operationId": "search_dsl_search_dsl_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DSLSearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DSLSearchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/search/text": {
+      "post": {
+        "tags": [
+          "Search"
+        ],
+        "summary": "Natural language search",
+        "description": "Search images using natural language with full pipeline.",
+        "operationId": "search_text_search_text_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TextSearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TextSearchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/metadata": {
+      "post": {
+        "tags": [
+          "Metadata"
+        ],
+        "summary": "Create metadata",
+        "description": "Create new image metadata record.",
+        "operationId": "create_metadata_metadata_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MetadataCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetadataCreateResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Metadata"
+        ],
+        "summary": "List metadata",
+        "description": "Get paginated list of metadata records.",
+        "operationId": "list_metadata_metadata_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "sort_by",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "created_at",
+              "title": "Sort By"
+            }
+          },
+          {
+            "name": "sort_order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "desc",
+              "title": "Sort Order"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetadataListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/metadata/{metadata_id}": {
+      "get": {
+        "tags": [
+          "Metadata"
+        ],
+        "summary": "Get metadata",
+        "description": "Get specific metadata record by ID.",
+        "operationId": "get_metadata_metadata__metadata_id__get",
+        "parameters": [
+          {
+            "name": "metadata_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Metadata Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageMetadata"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Metadata"
+        ],
+        "summary": "Update metadata",
+        "description": "Update existing metadata record.",
+        "operationId": "update_metadata_metadata__metadata_id__put",
+        "parameters": [
+          {
+            "name": "metadata_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Metadata Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MetadataUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetadataUpdateResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Metadata"
+        ],
+        "summary": "Delete metadata",
+        "description": "Delete metadata record (keeps image file).",
+        "operationId": "delete_metadata_metadata__metadata_id__delete",
+        "parameters": [
+          {
+            "name": "metadata_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Metadata Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetadataDeleteResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/images": {
+      "post": {
+        "tags": [
+          "Images"
+        ],
+        "summary": "Upload image",
+        "description": "Upload image file and generate embeddings.",
+        "operationId": "upload_image_images_post",
+        "parameters": [
+          {
+            "name": "description",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Description"
+            }
+          },
+          {
+            "name": "tags",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tags"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_image_images_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageUploadResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Images"
+        ],
+        "summary": "List images",
+        "description": "Get paginated list of images.",
+        "operationId": "list_images_images_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "sort_by",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "created_at",
+              "title": "Sort By"
+            }
+          },
+          {
+            "name": "sort_order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "desc",
+              "title": "Sort Order"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/images/{image_id}": {
+      "get": {
+        "tags": [
+          "Images"
+        ],
+        "summary": "Get image file",
+        "description": "Download image file by ID.",
+        "operationId": "get_image_file_images__image_id__get",
+        "parameters": [
+          {
+            "name": "image_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Image Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Images"
+        ],
+        "summary": "Delete image",
+        "description": "Delete image file and all associated data.",
+        "operationId": "delete_image_images__image_id__delete",
+        "parameters": [
+          {
+            "name": "image_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Image Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageDeleteResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "summary": "Health check",
+        "description": "Get system health status.",
+        "operationId": "health_check_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Body_upload_image_images_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_image_images_post"
+      },
+      "DSLExample": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "title": "Query",
+            "description": "Example DSL query"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "description": "Human-readable description"
+          },
+          "explanation": {
+            "type": "string",
+            "title": "Explanation",
+            "description": "Technical explanation"
+          }
+        },
+        "type": "object",
+        "required": [
+          "query",
+          "description",
+          "explanation"
+        ],
+        "title": "DSLExample",
+        "description": "DSL syntax example."
+      },
+      "DSLSearchRequest": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "title": "Query",
+            "description": "DSL query"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit",
+            "description": "Maximum number of results",
+            "default": 50
+          },
+          "threshold": {
+            "type": "number",
+            "title": "Threshold",
+            "description": "Minimum similarity threshold",
+            "default": 0.3
+          }
+        },
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "title": "DSLSearchRequest",
+        "description": "Request for DSL search."
+      },
+      "DSLSearchResponse": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "title": "Query",
+            "description": "DSL query"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/ImageMetadata"
+            },
+            "type": "array",
+            "title": "Results",
+            "description": "Search results"
+          },
+          "total_count": {
+            "type": "integer",
+            "title": "Total Count",
+            "description": "Total number of results"
+          },
+          "query_info": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Query Info",
+            "description": "Query information"
+          },
+          "processing_time_ms": {
+            "type": "integer",
+            "title": "Processing Time Ms",
+            "description": "Processing time"
+          }
+        },
+        "type": "object",
+        "required": [
+          "query",
+          "results",
+          "total_count",
+          "query_info",
+          "processing_time_ms"
+        ],
+        "title": "DSLSearchResponse",
+        "description": "Response for DSL search."
+      },
+      "DSLSyntaxResponse": {
+        "properties": {
+          "syntax_version": {
+            "type": "string",
+            "title": "Syntax Version",
+            "description": "DSL syntax version"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "description": "DSL description"
+          },
+          "operators": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Operators",
+            "description": "Available operators"
+          },
+          "examples": {
+            "items": {
+              "$ref": "#/components/schemas/DSLExample"
+            },
+            "type": "array",
+            "title": "Examples",
+            "description": "Usage examples"
+          }
+        },
+        "type": "object",
+        "required": [
+          "syntax_version",
+          "description",
+          "operators",
+          "examples"
+        ],
+        "title": "DSLSyntaxResponse",
+        "description": "Response for DSL syntax reference."
+      },
+      "DSLToVectorRequest": {
+        "properties": {
+          "dsl_query": {
+            "type": "string",
+            "title": "Dsl Query",
+            "description": "DSL query to convert"
+          },
+          "include_weights": {
+            "type": "boolean",
+            "title": "Include Weights",
+            "description": "Include component weights",
+            "default": true
+          },
+          "normalize": {
+            "type": "boolean",
+            "title": "Normalize",
+            "description": "Normalize final vector",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "dsl_query"
+        ],
+        "title": "DSLToVectorRequest",
+        "description": "Request for DSL to vector conversion."
+      },
+      "DSLToVectorResponse": {
+        "properties": {
+          "dsl_query": {
+            "type": "string",
+            "title": "Dsl Query",
+            "description": "Original DSL query"
+          },
+          "components": {
+            "items": {
+              "$ref": "#/components/schemas/VectorComponent"
+            },
+            "type": "array",
+            "title": "Components",
+            "description": "Vector components"
+          },
+          "processing_time_ms": {
+            "type": "integer",
+            "title": "Processing Time Ms",
+            "description": "Processing time in milliseconds"
+          }
+        },
+        "type": "object",
+        "required": [
+          "dsl_query",
+          "components",
+          "processing_time_ms"
+        ],
+        "title": "DSLToVectorResponse",
+        "description": "Response for DSL to vector conversion."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "Overall system status"
+          },
+          "components": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Components",
+            "description": "Component status details"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "components"
+        ],
+        "title": "HealthResponse",
+        "description": "System health check response."
+      },
+      "ImageDeleteResponse": {
+        "properties": {
+          "image_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Image Id",
+            "description": "Deleted image ID"
+          },
+          "deleted": {
+            "type": "boolean",
+            "title": "Deleted",
+            "description": "Deletion success status"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Status message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "image_id",
+          "deleted",
+          "message"
+        ],
+        "title": "ImageDeleteResponse",
+        "description": "Response for image deletion."
+      },
+      "ImageDimensions": {
+        "properties": {
+          "width": {
+            "type": "integer",
+            "title": "Width",
+            "description": "Image width in pixels"
+          },
+          "height": {
+            "type": "integer",
+            "title": "Height",
+            "description": "Image height in pixels"
+          }
+        },
+        "type": "object",
+        "required": [
+          "width",
+          "height"
+        ],
+        "title": "ImageDimensions",
+        "description": "Image dimensions."
+      },
+      "ImageListResponse": {
+        "properties": {
+          "images": {
+            "items": {
+              "$ref": "#/components/schemas/ImageMetadata"
+            },
+            "type": "array",
+            "title": "Images",
+            "description": "Image list"
+          },
+          "total_count": {
+            "type": "integer",
+            "title": "Total Count",
+            "description": "Total number of images"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit",
+            "description": "Query limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset",
+            "description": "Query offset"
+          },
+          "sort_by": {
+            "type": "string",
+            "title": "Sort By",
+            "description": "Sort field"
+          },
+          "sort_order": {
+            "type": "string",
+            "title": "Sort Order",
+            "description": "Sort order"
+          }
+        },
+        "type": "object",
+        "required": [
+          "images",
+          "total_count",
+          "limit",
+          "offset",
+          "sort_by",
+          "sort_order"
+        ],
+        "title": "ImageListResponse",
+        "description": "Response for image listing."
+      },
+      "ImageMetadata": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id",
+            "description": "Unique image identifier"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename",
+            "description": "Original filename"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description",
+            "description": "Image description"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags",
+            "description": "Image tags"
+          },
+          "file_size": {
+            "type": "integer",
+            "title": "File Size",
+            "description": "File size in bytes"
+          },
+          "dimensions": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ImageDimensions"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Image dimensions"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "Creation timestamp"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At",
+            "description": "Last update timestamp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "filename",
+          "file_size",
+          "created_at"
+        ],
+        "title": "ImageMetadata",
+        "description": "Image metadata model."
+      },
+      "ImageUploadResponse": {
+        "properties": {
+          "image_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Image Id",
+            "description": "Uploaded image ID"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ImageMetadata",
+            "description": "Image metadata"
+          },
+          "upload_success": {
+            "type": "boolean",
+            "title": "Upload Success",
+            "description": "Upload success status"
+          },
+          "embedding_generated": {
+            "type": "boolean",
+            "title": "Embedding Generated",
+            "description": "Embedding generation status"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Status message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "image_id",
+          "metadata",
+          "upload_success",
+          "embedding_generated",
+          "message"
+        ],
+        "title": "ImageUploadResponse",
+        "description": "Response for image upload."
+      },
+      "LLMProviderInfo": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Provider name"
+          },
+          "available": {
+            "type": "boolean",
+            "title": "Available",
+            "description": "Provider availability"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model",
+            "description": "Current model"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "description": "Provider description"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "available",
+          "description"
+        ],
+        "title": "LLMProviderInfo",
+        "description": "LLM provider information."
+      },
+      "LLMProvidersResponse": {
+        "properties": {
+          "current_provider": {
+            "type": "string",
+            "title": "Current Provider",
+            "description": "Current active provider"
+          },
+          "providers": {
+            "items": {
+              "$ref": "#/components/schemas/LLMProviderInfo"
+            },
+            "type": "array",
+            "title": "Providers",
+            "description": "Available providers"
+          }
+        },
+        "type": "object",
+        "required": [
+          "current_provider",
+          "providers"
+        ],
+        "title": "LLMProvidersResponse",
+        "description": "Response for LLM providers list."
+      },
+      "LLMSwitchRequest": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "title": "Provider",
+            "description": "Provider to switch to"
+          }
+        },
+        "type": "object",
+        "required": [
+          "provider"
+        ],
+        "title": "LLMSwitchRequest",
+        "description": "Request to switch LLM provider."
+      },
+      "LLMSwitchResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "description": "Switch success status"
+          },
+          "previous_provider": {
+            "type": "string",
+            "title": "Previous Provider",
+            "description": "Previous provider"
+          },
+          "current_provider": {
+            "type": "string",
+            "title": "Current Provider",
+            "description": "New current provider"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Status message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success",
+          "previous_provider",
+          "current_provider",
+          "message"
+        ],
+        "title": "LLMSwitchResponse",
+        "description": "Response for LLM provider switch."
+      },
+      "MetadataCreateRequest": {
+        "properties": {
+          "filename": {
+            "type": "string",
+            "title": "Filename",
+            "description": "Image filename"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description",
+            "description": "Image description"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tags",
+            "description": "Image tags"
+          },
+          "file_size": {
+            "type": "integer",
+            "title": "File Size",
+            "description": "File size in bytes"
+          },
+          "dimensions": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ImageDimensions"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Image dimensions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "filename",
+          "file_size"
+        ],
+        "title": "MetadataCreateRequest",
+        "description": "Request for creating metadata."
+      },
+      "MetadataCreateResponse": {
+        "properties": {
+          "metadata": {
+            "$ref": "#/components/schemas/ImageMetadata",
+            "description": "Created metadata"
+          },
+          "created": {
+            "type": "boolean",
+            "title": "Created",
+            "description": "Creation success status"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Status message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "metadata",
+          "created",
+          "message"
+        ],
+        "title": "MetadataCreateResponse",
+        "description": "Response for metadata creation."
+      },
+      "MetadataDeleteResponse": {
+        "properties": {
+          "metadata_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Metadata Id",
+            "description": "Deleted metadata ID"
+          },
+          "deleted": {
+            "type": "boolean",
+            "title": "Deleted",
+            "description": "Deletion success status"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Status message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "metadata_id",
+          "deleted",
+          "message"
+        ],
+        "title": "MetadataDeleteResponse",
+        "description": "Response for metadata deletion."
+      },
+      "MetadataListResponse": {
+        "properties": {
+          "metadata": {
+            "items": {
+              "$ref": "#/components/schemas/ImageMetadata"
+            },
+            "type": "array",
+            "title": "Metadata",
+            "description": "Metadata list"
+          },
+          "total_count": {
+            "type": "integer",
+            "title": "Total Count",
+            "description": "Total number of records"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit",
+            "description": "Query limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset",
+            "description": "Query offset"
+          },
+          "sort_by": {
+            "type": "string",
+            "title": "Sort By",
+            "description": "Sort field"
+          },
+          "sort_order": {
+            "type": "string",
+            "title": "Sort Order",
+            "description": "Sort order"
+          }
+        },
+        "type": "object",
+        "required": [
+          "metadata",
+          "total_count",
+          "limit",
+          "offset",
+          "sort_by",
+          "sort_order"
+        ],
+        "title": "MetadataListResponse",
+        "description": "Response for metadata listing."
+      },
+      "MetadataUpdateRequest": {
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description",
+            "description": "New description"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tags",
+            "description": "New tags"
+          }
+        },
+        "type": "object",
+        "title": "MetadataUpdateRequest",
+        "description": "Request for updating metadata."
+      },
+      "MetadataUpdateResponse": {
+        "properties": {
+          "metadata_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Metadata Id",
+            "description": "Updated metadata ID"
+          },
+          "updated": {
+            "type": "boolean",
+            "title": "Updated",
+            "description": "Update success status"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ImageMetadata",
+            "description": "Updated metadata"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Status message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "metadata_id",
+          "updated",
+          "metadata",
+          "message"
+        ],
+        "title": "MetadataUpdateResponse",
+        "description": "Response for metadata update."
+      },
+      "PipelineDebugInfo": {
+        "properties": {
+          "text_to_vector": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text To Vector",
+            "description": "Text to vector stage"
+          },
+          "vector_search": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vector Search",
+            "description": "Vector search stage"
+          }
+        },
+        "type": "object",
+        "title": "PipelineDebugInfo",
+        "description": "Debug information for search pipeline."
+      },
+      "SearchResult": {
+        "properties": {
+          "image_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Image Id",
+            "description": "Image ID"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/ImageMetadata",
+            "description": "Image metadata"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score",
+            "description": "Similarity score"
+          }
+        },
+        "type": "object",
+        "required": [
+          "image_id",
+          "metadata",
+          "score"
+        ],
+        "title": "SearchResult",
+        "description": "Individual search result."
+      },
+      "TextSearchRequest": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "Natural language query"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit",
+            "description": "Maximum number of results",
+            "default": 50
+          },
+          "threshold": {
+            "type": "number",
+            "title": "Threshold",
+            "description": "Minimum similarity threshold",
+            "default": 0.3
+          },
+          "include_pipeline_debug": {
+            "type": "boolean",
+            "title": "Include Pipeline Debug",
+            "description": "Include pipeline debug info",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "title": "TextSearchRequest",
+        "description": "Request for text search."
+      },
+      "TextSearchResponse": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "Query text"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/SearchResult"
+            },
+            "type": "array",
+            "title": "Results",
+            "description": "Search results"
+          },
+          "total_count": {
+            "type": "integer",
+            "title": "Total Count",
+            "description": "Total number of results"
+          },
+          "search_params": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Search Params",
+            "description": "Search parameters"
+          },
+          "pipeline_debug": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PipelineDebugInfo"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Pipeline debug info"
+          },
+          "processing_time_ms": {
+            "type": "integer",
+            "title": "Processing Time Ms",
+            "description": "Processing time"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text",
+          "results",
+          "total_count",
+          "search_params",
+          "processing_time_ms"
+        ],
+        "title": "TextSearchResponse",
+        "description": "Response for text search."
+      },
+      "TextToDSLRequest": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "Natural language query"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider",
+            "description": "LLM provider (openai/claude/local)"
+          },
+          "temperature": {
+            "type": "number",
+            "title": "Temperature",
+            "description": "Temperature for LLM generation",
+            "default": 0.3
+          },
+          "include_examples": {
+            "type": "boolean",
+            "title": "Include Examples",
+            "description": "Include examples in prompt",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "title": "TextToDSLRequest",
+        "description": "Request for text to DSL conversion using LLM."
+      },
+      "TextToDSLResponse": {
+        "properties": {
+          "original_text": {
+            "type": "string",
+            "title": "Original Text",
+            "description": "Original natural language query"
+          },
+          "dsl_query": {
+            "type": "string",
+            "title": "Dsl Query",
+            "description": "Generated DSL query"
+          },
+          "explanation": {
+            "type": "string",
+            "title": "Explanation",
+            "description": "Explanation of conversion"
+          },
+          "confidence": {
+            "type": "number",
+            "title": "Confidence",
+            "description": "Confidence score (0.0-1.0)"
+          },
+          "provider": {
+            "type": "string",
+            "title": "Provider",
+            "description": "LLM provider used"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model",
+            "description": "Model name"
+          },
+          "processing_time_ms": {
+            "type": "integer",
+            "title": "Processing Time Ms",
+            "description": "Processing time"
+          }
+        },
+        "type": "object",
+        "required": [
+          "original_text",
+          "dsl_query",
+          "explanation",
+          "confidence",
+          "provider",
+          "model",
+          "processing_time_ms"
+        ],
+        "title": "TextToDSLResponse",
+        "description": "Response for text to DSL conversion."
+      },
+      "TextToVectorRequest": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "Text to convert to vector"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "title": "TextToVectorRequest",
+        "description": "Request for text to vector conversion."
+      },
+      "TextToVectorResponse": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "Original text"
+          },
+          "vector": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Vector",
+            "description": "Generated vector"
+          },
+          "dimension": {
+            "type": "integer",
+            "title": "Dimension",
+            "description": "Vector dimension"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model",
+            "description": "Model used for encoding"
+          },
+          "processing_time_ms": {
+            "type": "integer",
+            "title": "Processing Time Ms",
+            "description": "Processing time in milliseconds"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text",
+          "vector",
+          "dimension",
+          "model",
+          "processing_time_ms"
+        ],
+        "title": "TextToVectorResponse",
+        "description": "Response for text to vector conversion."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "VectorComponent": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "Text component"
+          },
+          "vector": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Vector",
+            "description": "Component vector"
+          },
+          "weight": {
+            "type": "number",
+            "title": "Weight",
+            "description": "Component weight"
+          },
+          "operation": {
+            "type": "string",
+            "title": "Operation",
+            "description": "Operation type (INCLUDE/EXCLUDE)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text",
+          "vector",
+          "weight",
+          "operation"
+        ],
+        "title": "VectorComponent",
+        "description": "Component of a DSL vector."
+      },
+      "VectorSearchRequest": {
+        "properties": {
+          "vector": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Vector",
+            "description": "Query vector"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit",
+            "description": "Maximum number of results",
+            "default": 50
+          },
+          "threshold": {
+            "type": "number",
+            "title": "Threshold",
+            "description": "Minimum similarity threshold",
+            "default": 0.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "vector"
+        ],
+        "title": "VectorSearchRequest",
+        "description": "Request for vector search."
+      },
+      "VectorSearchResponse": {
+        "properties": {
+          "vector": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Vector",
+            "description": "Query vector"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/SearchResult"
+            },
+            "type": "array",
+            "title": "Results",
+            "description": "Search results"
+          },
+          "total_count": {
+            "type": "integer",
+            "title": "Total Count",
+            "description": "Total number of results"
+          },
+          "search_params": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Search Params",
+            "description": "Search parameters"
+          },
+          "processing_time_ms": {
+            "type": "integer",
+            "title": "Processing Time Ms",
+            "description": "Processing time"
+          }
+        },
+        "type": "object",
+        "required": [
+          "vector",
+          "results",
+          "total_count",
+          "search_params",
+          "processing_time_ms"
+        ],
+        "title": "VectorSearchResponse",
+        "description": "Response for vector search."
+      }
+    }
+  }
 }

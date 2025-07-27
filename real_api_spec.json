@@ -1,0 +1,21 @@
+✅ OpenAPI specification generated: /home/mako10k/refimage/api_specification.json
+📊 API Endpoints: 14
+  POST   /conversions/text-to-vector    - Convert text to CLIP vector
+  POST   /conversions/dsl-to-vector     - Convert DSL to vectors
+  GET    /conversions/dsl-syntax        - Get DSL syntax reference
+  POST   /conversions/text-to-dsl       - Convert natural language to DSL using LLM
+  GET    /llm/providers                 - List available LLM providers
+  POST   /llm/switch                    - Switch LLM provider
+  POST   /search/vector                 - Vector similarity search
+  POST   /search/dsl                    - DSL query search
+  POST   /search/text                   - Natural language search
+  POST   /metadata                      - Create metadata
+  GET    /metadata                      - List metadata
+  GET    /metadata/{metadata_id}        - Get metadata
+  PUT    /metadata/{metadata_id}        - Update metadata
+  DELETE /metadata/{metadata_id}        - Delete metadata
+  POST   /images                        - Upload image
+  GET    /images                        - List images
+  GET    /images/{image_id}             - Get image file
+  DELETE /images/{image_id}             - Delete image
+  GET    /health                        - Health check
