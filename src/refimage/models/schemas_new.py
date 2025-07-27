@@ -89,6 +89,7 @@ class DSLSyntaxResponse(BaseModel):
 # SEARCH SCHEMAS
 # ========================================
 
+
 class VectorSearchRequest(BaseModel):
     """Request for vector search."""
 
@@ -122,7 +123,8 @@ class TextSearchRequest(BaseModel):
     limit: int = Field(50, description="Maximum number of results")
     threshold: float = Field(0.3, description="Minimum similarity threshold")
     include_pipeline_debug: bool = Field(
-        False, description="Include pipeline debug info")
+        False, description="Include pipeline debug info"
+    )
 
 
 class SearchResult(BaseModel):
@@ -157,9 +159,11 @@ class PipelineDebugInfo(BaseModel):
     """Debug information for search pipeline."""
 
     text_to_vector: Optional[Dict[str, Any]] = Field(
-        None, description="Text to vector stage")
+        None, description="Text to vector stage"
+    )
     vector_search: Optional[Dict[str, Any]] = Field(
-        None, description="Vector search stage")
+        None, description="Vector search stage"
+    )
 
 
 class TextSearchResponse(BaseModel):
@@ -170,13 +174,15 @@ class TextSearchResponse(BaseModel):
     total_count: int = Field(..., description="Total number of results")
     search_params: Dict[str, Any] = Field(..., description="Search parameters")
     pipeline_debug: Optional[PipelineDebugInfo] = Field(
-        None, description="Pipeline debug info")
+        None, description="Pipeline debug info"
+    )
     processing_time_ms: int = Field(..., description="Processing time")
 
 
 # ========================================
 # METADATA SCHEMAS
 # ========================================
+
 
 class ImageDimensions(BaseModel):
     """Image dimensions."""
@@ -199,6 +205,7 @@ class ImageMetadata(BaseModel):
 
     class Config:
         """Pydantic configuration."""
+
         json_encoders = {UUID: str, datetime: lambda v: v.isoformat()}
 
 
@@ -268,6 +275,7 @@ class MetadataDeleteResponse(BaseModel):
 # IMAGE SCHEMAS
 # ========================================
 
+
 class ImageUploadResponse(BaseModel):
     """Response for image upload."""
 
@@ -300,6 +308,7 @@ class ImageDeleteResponse(BaseModel):
 # ========================================
 # SYSTEM SCHEMAS
 # ========================================
+
 
 class HealthResponse(BaseModel):
     """System health check response."""

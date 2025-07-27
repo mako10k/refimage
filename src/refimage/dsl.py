@@ -132,9 +132,7 @@ class TagFilter(QueryNode):
             batch_size = 100
 
             while True:
-                batch = storage_manager.list_images(
-                    limit=batch_size, offset=offset
-                )
+                batch = storage_manager.list_images(limit=batch_size, offset=offset)
                 if not batch:
                     break
                 all_images.extend(batch)
@@ -375,9 +373,7 @@ class DSLParser:
         # Handle OR operations (lowest precedence)
         or_parts = re.split(r"\bOR\b", query, flags=re.IGNORECASE)
         if len(or_parts) > 1:
-            operands = [
-                self._parse_and_expression(part.strip()) for part in or_parts
-            ]
+            operands = [self._parse_and_expression(part.strip()) for part in or_parts]
             return OrQuery(operands)
 
         # Handle AND operations
@@ -387,9 +383,7 @@ class DSLParser:
         """Parse AND expression."""
         and_parts = re.split(r"\bAND\b", query, flags=re.IGNORECASE)
         if len(and_parts) > 1:
-            operands = [
-                self._parse_not_expression(part.strip()) for part in and_parts
-            ]
+            operands = [self._parse_not_expression(part.strip()) for part in and_parts]
             return AndQuery(operands)
 
         return self._parse_not_expression(query)
@@ -399,9 +393,7 @@ class DSLParser:
         not_match = re.search(r"(.+?)\bNOT\b(.+)", query, re.IGNORECASE)
         if not_match:
             base_query = self._parse_simple_query(not_match.group(1).strip())
-            exclude_query = self._parse_simple_query(
-                not_match.group(2).strip()
-            )
+            exclude_query = self._parse_simple_query(not_match.group(2).strip())
             return NotQuery(base_query, exclude_query)
 
         return self._parse_simple_query(query)

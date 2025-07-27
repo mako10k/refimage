@@ -20,11 +20,11 @@ from fastapi.responses import StreamingResponse
 from .config import Settings
 from .dsl import DSLError, DSLExecutor
 from .llm import (
+    TEXT_TO_DSL_EXAMPLES,
+    TEXT_TO_DSL_SYSTEM_PROMPT,
+    LLMError,
     LLMManager,
     LLMMessage,
-    LLMError,
-    TEXT_TO_DSL_SYSTEM_PROMPT,
-    TEXT_TO_DSL_EXAMPLES,
 )
 from .models.clip_model import CLIPModel, CLIPModelError
 from .models.schemas import (  # Conversion, Search, Metadata, etc.
@@ -62,7 +62,7 @@ from .models.schemas import (  # Conversion, Search, Metadata, etc.
     VectorSearchResponse,
 )
 from .search import VectorSearchEngine, VectorSearchError
-from .storage import StorageManager, StorageError
+from .storage import StorageError, StorageManager
 
 logger = logging.getLogger(__name__)
 
@@ -122,9 +122,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         if _search_engine is None:
             try:
                 _search_engine = VectorSearchEngine(settings)
-                assert (
-                    _search_engine is not None
-                ), "Search engine creation failed"
+                assert _search_engine is not None, "Search engine creation failed"
             except Exception as e:
                 logger.error(f"Search engine initialization failed: {e}")
                 raise HTTPException(
@@ -140,12 +138,8 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             try:
                 clip_model = get_clip_model()
                 search_engine = get_search_engine()
-                _dsl_executor = DSLExecutor(
-                    clip_model, search_engine, storage_manager
-                )
-                assert (
-                    _dsl_executor is not None
-                ), "DSL executor creation failed"
+                _dsl_executor = DSLExecutor(clip_model, search_engine, storage_manager)
+                assert _dsl_executor is not None, "DSL executor creation failed"
             except Exception as e:
                 logger.error(f"DSL executor initialization failed: {e}")
                 raise HTTPException(
@@ -187,9 +181,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             )
         except CLIPModelError as e:
             logger.error(f"CLIP model error: {e}")
-            raise HTTPException(
-                status_code=500, detail=f"CLIP model error: {e}"
-            )
+            raise HTTPException(status_code=500, detail=f"CLIP model error: {e}")
         except Exception as e:
             logger.error(f"Text to vector conversion failed: {e}")
             raise HTTPException(status_code=500, detail="Conversion failed")
@@ -231,9 +223,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             raise HTTPException(status_code=400, detail=f"DSL error: {e}")
         except CLIPModelError as e:
             logger.error(f"CLIP model error: {e}")
-            raise HTTPException(
-                status_code=500, detail=f"CLIP model error: {e}"
-            )
+            raise HTTPException(status_code=500, detail=f"CLIP model error: {e}")
         except Exception as e:
             logger.error(f"DSL to vector conversion failed: {e}")
             raise HTTPException(status_code=500, detail="Conversion failed")
@@ -285,9 +275,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         response_model=TextToDSLResponse,
         tags=["Conversions"],
         summary="Convert natural language to DSL using LLM",
-        description=(
-            "Use LLM to convert natural language queries to DSL format."
-        ),
+        description=("Use LLM to convert natural language queries to DSL format."),
     )
     async def text_to_dsl(
         request: TextToDSLRequest,
@@ -335,9 +323,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
 
             # Parse response to extract DSL and explanation
             dsl_query = response.content.strip()
-            explanation = (
-                f"Converted using {response.provider} ({response.model})"
-            )
+            explanation = f"Converted using {response.provider} ({response.model})"
 
             # Simple confidence estimation based on response quality
             confidence = 0.8 if len(dsl_query) > 10 else 0.5
@@ -359,9 +345,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             raise HTTPException(status_code=500, detail=f"LLM error: {e}")
         except Exception as e:
             logger.error(f"Text to DSL conversion failed: {e}")
-            raise HTTPException(
-                status_code=500, detail="Text to DSL conversion failed"
-            )
+            raise HTTPException(status_code=500, detail="Text to DSL conversion failed")
 
     @app.get(
         "/llm/providers",
@@ -409,9 +393,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
 
         except Exception as e:
             logger.error(f"Failed to list LLM providers: {e}")
-            raise HTTPException(
-                status_code=500, detail="Failed to list LLM providers"
-            )
+            raise HTTPException(status_code=500, detail="Failed to list LLM providers")
 
     @app.post(
         "/llm/switch",
@@ -445,9 +427,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             raise HTTPException(status_code=400, detail=str(e))
         except Exception as e:
             logger.error(f"Failed to switch LLM provider: {e}")
-            raise HTTPException(
-                status_code=500, detail="Failed to switch provider"
-            )
+            raise HTTPException(status_code=500, detail="Failed to switch provider")
 
     # ========================================
     # SEARCH EXECUTION
@@ -635,9 +615,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
 
         except CLIPModelError as e:
             logger.error(f"CLIP model error: {e}")
-            raise HTTPException(
-                status_code=500, detail=f"CLIP model error: {e}"
-            )
+            raise HTTPException(status_code=500, detail=f"CLIP model error: {e}")
         except VectorSearchError as e:
             logger.error(f"Vector search error: {e}")
             raise HTTPException(status_code=500, detail=f"Search error: {e}")
@@ -739,9 +717,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         try:
             metadata = storage.get_metadata(metadata_id)
             if metadata is None:
-                raise HTTPException(
-                    status_code=404, detail="Metadata not found"
-                )
+                raise HTTPException(status_code=404, detail="Metadata not found")
 
             return metadata
 
@@ -773,9 +749,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             )
 
             if updated_metadata is None:
-                raise HTTPException(
-                    status_code=404, detail="Metadata not found"
-                )
+                raise HTTPException(status_code=404, detail="Metadata not found")
 
             return MetadataUpdateResponse(
                 metadata_id=metadata_id,
@@ -808,9 +782,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             success = storage.delete_metadata_only(metadata_id)
 
             if not success:
-                raise HTTPException(
-                    status_code=404, detail="Metadata not found"
-                )
+                raise HTTPException(status_code=404, detail="Metadata not found")
 
             return MetadataDeleteResponse(
                 metadata_id=metadata_id,
@@ -849,9 +821,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             # Parse tags
             tag_list = []
             if tags:
-                tag_list = [
-                    tag.strip() for tag in tags.split(",") if tag.strip()
-                ]
+                tag_list = [tag.strip() for tag in tags.split(",") if tag.strip()]
 
             # Store image and create metadata
             image_data = file.file.read()
@@ -866,9 +836,10 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             embedding_vector = clip_model.encode_image(metadata.file_path)
 
             # Store embedding
-            from .models.schemas import ImageEmbedding
             from datetime import datetime
-            
+
+            from .models.schemas import ImageEmbedding
+
             embedding = ImageEmbedding(
                 image_id=metadata.id,
                 embedding=embedding_vector.tolist(),
@@ -890,16 +861,17 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
 
         except CLIPModelError as e:
             logger.error(f"CLIP model error: {e}")
-            raise HTTPException(
-                status_code=500, detail=f"CLIP model error: {e}"
-            )
+            raise HTTPException(status_code=500, detail=f"CLIP model error: {e}")
         except StorageError as e:
             logger.error(f"Storage error: {e}")
             # Check if this is a duplicate image error
             if "Duplicate image detected" in str(e):
                 raise HTTPException(
                     status_code=409,
-                    detail="Duplicate image detected. This image has already been uploaded."
+                    detail=(
+                        "Duplicate image detected. "
+                        "This image has already been uploaded."
+                    ),
                 )
             else:
                 raise HTTPException(status_code=500, detail=f"Storage error: {e}")
@@ -966,9 +938,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             # Get image path
             image_path = storage.get_image_path(image_id)
             if not image_path.exists():
-                raise HTTPException(
-                    status_code=404, detail="Image file not found"
-                )
+                raise HTTPException(status_code=404, detail="Image file not found")
 
             # Return streaming response
             def iterfile():
@@ -1008,9 +978,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             try:
                 search_engine.remove_image(str(image_id))
             except VectorSearchError:
-                logger.warning(
-                    f"Could not remove {image_id} from search index"
-                )
+                logger.warning(f"Could not remove {image_id} from search index")
 
             # Delete from storage (metadata, embedding, and file)
             success = storage.delete_image(image_id)
@@ -1022,17 +990,13 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
                     message="Image deleted successfully",
                 )
             else:
-                raise HTTPException(
-                    status_code=500, detail="Failed to delete image"
-                )
+                raise HTTPException(status_code=500, detail="Failed to delete image")
 
         except HTTPException:
             raise
         except Exception as e:
             logger.error(f"Failed to delete image: {e}")
-            raise HTTPException(
-                status_code=500, detail="Failed to delete image"
-            )
+            raise HTTPException(status_code=500, detail="Failed to delete image")
 
     # ========================================
     # SYSTEM

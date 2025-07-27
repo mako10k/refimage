@@ -30,9 +30,7 @@ class LLMError(Exception):
 class LLMMessage(BaseModel):
     """LLM message format."""
 
-    role: str = Field(
-        ..., description="Message role (system, user, assistant)"
-    )
+    role: str = Field(..., description="Message role (system, user, assistant)")
     content: str = Field(..., description="Message content")
 
 
@@ -43,9 +41,7 @@ class LLMResponse(BaseModel):
     provider: str = Field(..., description="LLM provider used")
     model: str = Field(..., description="Model name")
     tokens_used: Optional[int] = Field(None, description="Tokens consumed")
-    processing_time_ms: int = Field(
-        ..., description="Processing time in milliseconds"
-    )
+    processing_time_ms: int = Field(..., description="Processing time in milliseconds")
 
 
 class BaseLLMProvider(ABC):
@@ -183,9 +179,7 @@ class ClaudeProvider(BaseLLMProvider):
             if msg.role == "system":
                 system_message = msg.content
             else:
-                claude_messages.append(
-                    {"role": msg.role, "content": msg.content}
-                )
+                claude_messages.append({"role": msg.role, "content": msg.content})
 
         payload = {
             "model": self.model,

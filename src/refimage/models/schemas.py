@@ -98,12 +98,8 @@ class TextToDSLRequest(BaseModel):
     provider: Optional[str] = Field(
         None, description="LLM provider (openai/claude/local)"
     )
-    temperature: float = Field(
-        0.3, description="Temperature for LLM generation"
-    )
-    include_examples: bool = Field(
-        True, description="Include examples in prompt"
-    )
+    temperature: float = Field(0.3, description="Temperature for LLM generation")
+    include_examples: bool = Field(True, description="Include examples in prompt")
 
     @field_validator("text")
     @classmethod

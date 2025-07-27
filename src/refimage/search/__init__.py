@@ -50,8 +50,7 @@ class VectorSearchEngine:
 
         if faiss is None:
             error_msg = (
-                "FAISS library not available. "
-                "Install with: pip install faiss-cpu"
+                "FAISS library not available. " "Install with: pip install faiss-cpu"
             )
             raise VectorSearchError(error_msg)
 
@@ -164,9 +163,7 @@ class VectorSearchEngine:
             ids = []
 
             for embedding in embeddings:
-                assert (
-                    embedding.embedding is not None
-                ), "Embedding vector required"
+                assert embedding.embedding is not None, "Embedding vector required"
                 vector = np.array(embedding.embedding, dtype=np.float32)
 
                 # Initialize index on first embedding
@@ -379,9 +376,7 @@ class VectorSearchEngine:
             metadata_path = index_path.with_suffix(".pkl")
 
             if not faiss_path.exists() or not metadata_path.exists():
-                raise VectorSearchError(
-                    f"Index files not found at {index_path}"
-                )
+                raise VectorSearchError(f"Index files not found at {index_path}")
 
             # Load FAISS index
             self.index = faiss.read_index(str(faiss_path))
