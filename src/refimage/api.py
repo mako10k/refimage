@@ -14,7 +14,7 @@ import time
 from typing import Optional
 from uuid import UUID
 
-from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 
 from .config import Settings
@@ -838,8 +838,8 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     )
     async def upload_image(
         file: UploadFile = File(...),
-        description: Optional[str] = None,
-        tags: Optional[str] = None,
+        description: Optional[str] = Form(None),
+        tags: Optional[str] = Form(None),
         storage: StorageManager = Depends(get_storage_manager),
         clip_model: CLIPModel = Depends(get_clip_model),
         search_engine: VectorSearchEngine = Depends(get_search_engine),
@@ -895,7 +895,14 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             )
         except StorageError as e:
             logger.error(f"Storage error: {e}")
-            raise HTTPException(status_code=500, detail=f"Storage error: {e}")
+            # Check if this is a duplicate image error
+            if "Duplicate image detected" in str(e):
+                raise HTTPException(
+                    status_code=409,
+                    detail="Duplicate image detected. This image has already been uploaded."
+                )
+            else:
+                raise HTTPException(status_code=500, detail=f"Storage error: {e}")
         except Exception as e:
             logger.error(f"Image upload failed: {e}")
             raise HTTPException(status_code=500, detail="Upload failed")
