@@ -135,6 +135,8 @@ code-quality-report.json
 *.onnx
 models/
 !models/.gitkeep
+!src/refimage/models/
+!src/refimage/models/*.py
 images/
 !images/.gitkeep
 embeddings/
