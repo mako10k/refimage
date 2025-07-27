@@ -1061,11 +1061,12 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
                 "database_path": str(storage.db_path),
             }
 
+            search_stats = search_engine.get_stats()
             search_status = {
-                "total_embeddings": search_engine.count(),
-                "embedding_dimension": search_engine.dimension,
-                "index_type": search_engine.index_type,
-                "is_trained": search_engine.is_trained,
+                "total_embeddings": search_stats["total_embeddings"],
+                "embedding_dimension": search_stats["embedding_dimension"],
+                "index_type": search_stats["index_type"],
+                "is_trained": search_stats["is_trained"],
             }
 
             return HealthResponse(
