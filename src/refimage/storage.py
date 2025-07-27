@@ -211,7 +211,11 @@ class StorageManager:
                 file_extension = f".{image.format.lower()}"
 
             # Create metadata object
+            from uuid import uuid4
+            from datetime import datetime
+            
             metadata = ImageMetadata(
+                id=uuid4(),
                 filename=filename,
                 file_path=Path("placeholder"),  # Will be updated
                 file_size=len(image_data),
@@ -220,6 +224,8 @@ class StorageManager:
                 height=height,
                 description=description,
                 tags=tags or [],
+                created_at=datetime.utcnow(),
+                updated_at=None,
             )
 
             # Create storage path
