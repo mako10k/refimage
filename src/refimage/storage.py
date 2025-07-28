@@ -840,6 +840,35 @@ class StorageManager:
             logger.error(error_msg)
             raise StorageError(error_msg) from e
 
+    def get_image_path(self, image_id: UUID) -> Path:
+        """
+        Get the file path for a stored image.
+
+        Args:
+            image_id: Image identifier
+
+        Returns:
+            Path to the image file
+
+        Raises:
+            StorageError: If image not found or path invalid
+        """
+        assert image_id is not None, "Image ID is required"
+
+        try:
+            # Get metadata to find the file path
+            metadata = self.get_metadata(image_id)
+            if metadata is None:
+                raise StorageError(f"Image not found: {image_id}")
+            
+            # Return the stored file path
+            return metadata.file_path
+
+        except Exception as e:
+            error_msg = f"Failed to get image path: {e}"
+            logger.error(error_msg)
+            raise StorageError(error_msg) from e
+
     def count_embeddings(self) -> int:
         """
         Count total number of embeddings.
