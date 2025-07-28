@@ -316,6 +316,40 @@ class StorageManager:
             logger.error(error_msg)
             raise StorageError(error_msg) from e
 
+    def get_image_path(self, image_id: UUID) -> Path:
+        """
+        Get image file path by ID.
+
+        Args:
+            image_id: Image identifier
+
+        Returns:
+            Path to image file
+
+        Raises:
+            StorageError: If metadata not found
+        """
+        assert image_id is not None, "Image ID is required"
+
+        try:
+            metadata = self.get_metadata(image_id)
+            if metadata is None:
+                raise StorageError(f"Image not found: {image_id}")
+
+            # Extract file extension from filename
+            file_extension = Path(metadata.filename).suffix
+            if not file_extension:
+                file_extension = ".png"  # Default extension
+            
+            # Construct file path
+            file_path = self.image_storage_path / f"{image_id}{file_extension}"
+            return file_path
+
+        except Exception as e:
+            error_msg = f"Failed to get image path: {e}"
+            logger.error(error_msg)
+            raise StorageError(error_msg) from e
+
     def list_images(
         self,
         limit: int = 100,
